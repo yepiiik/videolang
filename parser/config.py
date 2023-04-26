@@ -1,0 +1,7 @@
+from environs import Env
+
+env = Env()
+env.read_env()
+
+MONGO_INITDB_ROOT_USERNAME = env.str("MONGO_INITDB_ROOT_USERNAME")
+MONGO_INITDB_ROOT_PASSWORD = env.str("MONGO_INITDB_ROOT_PASSWORD")
