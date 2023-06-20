@@ -1,15 +1,21 @@
+import models
+
 import time
-# import pymongo
+import pymongo
 import config
 
-import models
 
 
 if __name__ == "__main__":
-    # myclient = pymongo.MongoClient(f"mongodb://{config.MONGO_INITDB_ROOT_USERNAME}:{config.MONGO_INITDB_ROOT_PASSWORD}@27017/")
-    # print(myclient.list_database_names())
+    myclient = pymongo.MongoClient(f"mongodb://localhost:27017/")
 
-    guide_builder = models.Guide_Builder()
-    guide_builder.get()
+    videolang_db = myclient.get_database('videolang')
+    videos_collection = videolang_db.get_collection('videos')
+
+    videos_collection.insert_one({'title': "mongo"})
+    print(videos_collection.find_one({'title': 'mongo'}))
+
+    # guide_builder = models.Guide_Builder()
+    # guide_builder.get()
     
-    print(guide_builder.formated_data)
+    # print(guide_builder.formated_data)
