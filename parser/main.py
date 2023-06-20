@@ -67,7 +67,7 @@ if __name__ == "__main__":
     channel.get()
     channel.get_all_videos()
 
-    with open(f"{os.path.dirname(__file__)}/data/{channel.channel_name}.json", "w") as file:
+    with open(f"{os.path.dirname(__file__)}/data/{channel.channel_name}.json", "w", encoding="utf8") as file:
         data = {
             "channel": channel.channel_name,
             "videos": {
