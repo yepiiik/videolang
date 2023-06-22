@@ -1,0 +1,119 @@
+{
+    "context": {
+        "client": {
+            "hl": "ru",
+            "gl": "UA",
+            "remoteHost": "109.87.105.25",
+            "deviceMake": "",
+            "deviceModel": "",
+            "visitorData": "CgtLb0lSRGh0enh1ayi7msiiBg%3D%3D",
+            "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Safari/537.36,gzip(gfe)",
+            "clientName": "WEB",
+            "clientVersion": "2.20230502.01.00",
+            "osName": "Windows",
+            "osVersion": "10.0",
+            "originalUrl": "https://www.youtube.com/@bovje/videos",
+            "platform": "DESKTOP",
+            "clientFormFactor": "UNKNOWN_FORM_FACTOR",
+            "configInfo": {
+                "appInstallData": "CLuayKIGEKWZrwUQzN-uBRC9tq4FEKqy_hIQouyuBRDuoq8FEMu3_hIQ5_euBRDyqK8FEJ-3_hIQuIuuBRDM9a4FEJGprwUQ4tSuBRDbm68FENf_rgUQ1KGvBRCJ6K4FEIGdrwUQt-CuBRDks_4SEMyu_hIQmNquBRCZvv4SEJj8rgU%3D"
+            },
+            "userInterfaceTheme": "USER_INTERFACE_THEME_DARK",
+            "timeZone": "Europe/Chisinau",
+            "browserName": "Chrome",
+            "browserVersion": "112.0.0.0",
+            "acceptHeader": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+            "deviceExperimentId": "ChxOekUzTnpRME1qZzVOalExTVRRM01UazBOQT09ELuayKIGGMnM7ZwG",
+            "screenWidthPoints": 1880,
+            "screenHeightPoints": 792,
+            "screenPixelDensity": 1,
+            "screenDensityFloat": 1,
+            "utcOffsetMinutes": 180,
+            "connectionType": "CONN_CELLULAR_4G",
+            "memoryTotalKbytes": "8000000"
+        },
+        "user": {
+            "lockedSafetyMode": false
+        },
+        "request": {
+            "useSsl": true,
+            "internalExperimentFlags": [],
+            "consistencyTokenJars": []
+        },
+        "clickTracking": {
+            "clickTrackingParams": "CAAQhGciEwjklYLe0Nj-AhUaMrIKHV4nDOY="
+        },
+        "adSignalsInfo": {
+            "params": [
+                {
+                    "key": "dt",
+                    "value": "1683098942429"
+                },
+                {
+                    "key": "flash",
+                    "value": "0"
+                },
+                {
+                    "key": "frm",
+                    "value": "0"
+                },
+                {
+                    "key": "u_tz",
+                    "value": "180"
+                },
+                {
+                    "key": "u_his",
+                    "value": "12"
+                },
+                {
+                    "key": "u_h",
+                    "value": "792"
+                },
+                {
+                    "key": "u_w",
+                    "value": "1880"
+                },
+                {
+                    "key": "u_ah",
+                    "value": "792"
+                },
+                {
+                    "key": "u_aw",
+                    "value": "1880"
+                },
+                {
+                    "key": "u_cd",
+                    "value": "24"
+                },
+                {
+                    "key": "bc",
+                    "value": "31"
+                },
+                {
+                    "key": "bih",
+                    "value": "792"
+                },
+                {
+                    "key": "biw",
+                    "value": "1863"
+                },
+                {
+                    "key": "brdim",
+                    "value": "0,0,0,0,1880,0,1920,1032,1880,792"
+                },
+                {
+                    "key": "vis",
+                    "value": "1"
+                },
+                {
+                    "key": "wgl",
+                    "value": "true"
+                },
+                {
+                    "key": "ca_type",
+                    "value": "image"
+                }
+            ]
+        }
+    }
+}

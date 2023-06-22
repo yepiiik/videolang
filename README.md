@@ -8,8 +8,9 @@ This script is analysing(indexing) YouTube video which contain subtitles, save i
 
 - [x] Entry poin (where to start searching for videos)
 - [x] Get video list from channel
-- [ ] Get subtitles for each video
+- [x] Get subtitles for each video
 - [ ] Create database structure
+- [ ] Refactore for async requests
 - [ ] Create test application (which use data from database)
 
 ## Project structure
