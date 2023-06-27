@@ -30,7 +30,7 @@ class Watch:
         self.transcription = None
 
     def get(self):
-        print(self.header["user-agent"])
+        print(f"Get transcription for: https://youtube.com/watch?v={self.video_id}")
         conn = requests.get(f"https://www.youtube.com/watch?v={self.video_id}", headers=self.header)
         self.html = conn.text
         conn.close()
@@ -45,8 +45,6 @@ class Watch:
             data = json.load(file)
             data["params"] = self.json_data["engagementPanels"][-1]["engagementPanelSectionListRenderer"]["content"]["continuationItemRenderer"]["continuationEndpoint"]["getTranscriptEndpoint"]["params"]
         conn = requests.post("https://www.youtube.com/youtubei/v1/get_transcript?key=AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8&prettyPrint=false", headers=self.header, data=json.dumps(data))
-        if conn.text == None:
-            return
         self.transcription = json.loads(conn.text)
         conn.close()
         return self.transcription
@@ -62,7 +60,7 @@ class Watch:
 
 
 
-class Channel():
+class Channel:
     """
         Creating channel model to get information from differant channels
     """
@@ -80,11 +78,10 @@ class Channel():
         self._continuationItem = None
         self._continuationToken = None
 
-    def get(self):
+    def get(self) -> str:
         """
-            Enter channel name for example: mrbeast
+            The output is raw HTML
         """
-        
         conn = requests.get(f"https://www.youtube.com/@{self.channel_name}", headers=self.header)
         self.html = conn.text
         conn.close()
@@ -94,16 +91,30 @@ class Channel():
             self.__channel_parse_json()
         except TypeError:
             pass
+        
+        return self.html
 
-    def get_all_videos(self):
+    def get_all_videos(self) -> list:
         self.get_videos_pack()
         while True:
-            print(len(self.video_ids))
+            print(self._continuationToken)
             try:
                 self.browse()
             except BaseException:
                 break
         print(len(self.video_ids))
+        return self.videos
+
+    def iter_all_videos(self):
+        yield self.get_videos_pack()
+        while True:
+            print(self._continuationToken)
+            try:
+                yield self.browse()
+            except BaseException:
+                break
+        print(len(self.video_ids))
+        return None
 
     def get_videos_pack(self):
         conn = requests.get(f"https://www.youtube.com/@{self.channel_name}/videos", headers=self.header)
@@ -112,9 +123,10 @@ class Channel():
 
         self.json_data = search_within_scripts("browseEndpoint", self.html)
         try:
-            self.__videos_pack_parse_json()
+            return self.__videos_pack_parse_json()
         except:
             pass
+
 
     def browse(self):      
         with open("parser/get_videos_content2.json", "r") as file:
@@ -125,8 +137,7 @@ class Channel():
         conn = requests.post("https://www.youtube.com/youtubei/v1/browse?key=AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8&prettyPrint=false", headers=self.header, data=json.dumps(data))
         self.json_data = conn.json()
         conn.close()
-
-        self.__browse_parse_json()
+        return self.__browse_parse_json() # videos pack
 
     def __get_json_from_html_scripts(self, keyword, html):
         # getting all script in html
@@ -148,7 +159,8 @@ class Channel():
     def __browse_parse_json(self):
         json_data = self.json_data
         contents = json_data["onResponseReceivedActions"][0]["appendContinuationItemsAction"]["continuationItems"]
-        self.__videos_parse_json(contents)
+        pack = self.__videos_parse_json(contents)
+        return pack # videos pack
 
 
     def __videos_pack_parse_json(self):
@@ -157,12 +169,14 @@ class Channel():
         category = json_data["contents"]["twoColumnBrowseResultsRenderer"]["tabs"][1]["tabRenderer"]
         if category["title"] == "Videos":
             contents = category["content"]["richGridRenderer"]["contents"]
-            self.__videos_parse_json(contents)
+            return self.__videos_parse_json(contents)
 
     def __videos_parse_json(self, contents):
+        pack = []
         for content in contents:
             if "richItemRenderer" in content:
-                self.videos.append(content["richItemRenderer"])
+                self.videos.append(content["richItemRenderer"]) # add video to videos array (there may be memory leaks)
+                pack.append(content["richItemRenderer"]) # add video to local pack (there may be memory leaks)
                 self.video_ids.append(content["richItemRenderer"]["content"]["videoRenderer"]["videoId"])
             elif "continuationItemRenderer" in content:
                 self._continuationItem = content
@@ -170,6 +184,7 @@ class Channel():
                 continuationTokenExist = True
         if continuationTokenExist != True:
             raise(BaseException())
+        return pack
 
 
 class Guide_Builder():
