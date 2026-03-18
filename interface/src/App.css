@@ -1,0 +1,17 @@
+@media screen and (min-width: 900px) {
+  .wrapper {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.main__header {
+  height: calc(32pt + 12pt + 12pt);
+}
+
+.wrapper {
+  margin-top: 16pt;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16pt;
+}
+

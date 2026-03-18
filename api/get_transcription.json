@@ -1,9 +1,9 @@
 {
     "context": {
         "client": {
-            "hl": "ru",
-            "gl": "UA",
-            "remoteHost": "109.87.105.25",
+            "hl": "en",
+            "gl": "US",
+            "remoteHost": "",
             "deviceMake": "",
             "deviceModel": "",
             "visitorData": "CgtLb0lSRGh0enh1ayjPp8miBg%3D%3D",
@@ -12,7 +12,7 @@
             "clientVersion": "2.20230502.01.00",
             "osName": "Windows",
             "osVersion": "10.0",
-            "originalUrl": "https://www.youtube.com/watch?v=a3U3uDAkmK0&t=134s&ab_channel=%D0%91%D0%9E%D0%92%D0%96%D0%95%D0%92%D0%86%D0%9B%D0%AC%D0%9D%D0%86%7C%D0%95%D0%BB%D1%8F%D0%9C%D1%83%D1%80%D0%B0%D0%B2%D1%81%D1%8C%D0%BA%D1%96",
+            "originalUrl": "",
             "platform": "DESKTOP",
             "clientFormFactor": "UNKNOWN_FORM_FACTOR",
             "configInfo": {
@@ -116,5 +116,5 @@
             ]
         }
     },
-    "params": "CgthM1UzdURBa21LMBISQ2dOaGMzSVNBblZyR2dBJTNEGAEqM2VuZ2FnZW1lbnQtcGFuZWwtc2VhcmNoYWJsZS10cmFuc2NyaXB0LXNlYXJjaC1wYW5lbDABOAFAAQ%3D%3D"
+    "params": ""
 }

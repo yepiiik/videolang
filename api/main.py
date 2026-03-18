@@ -13,7 +13,7 @@ if __name__ == "__main__":
     client = pymongo.MongoClient('mongodb://localhost:27017/')
     controller = controllers.VideolangController(mongo_client=client)
 
-    videos = controller.fast_get_channel_videos("whiskeyblueslounge")
+    videos = controller.get_uptodate_channel_videos("ruriohama")
     print(videos)
 
     # guide_builder = models.Guide_Builder()
@@ -34,7 +34,7 @@ if __name__ == "__main__":
     #     }
     #     transcriptions_collection.insert_one(data)
 
-    # channel = models.Channel("MrMaxLife")
+    # channel = models.Channel("BorisGetsCash")
     # channel.get()
     # channel.get_all_videos()
     # for video in channel.videos:
@@ -60,7 +60,7 @@ if __name__ == "__main__":
     #             }
     #             videos_collection.insert_one(data)
         
-    # channel = models.Channel("CHRISHERIA")
+    # channel = models.Channel("BorisGetsCash")
     # channel.get()
     # channel.get_all_videos()
 

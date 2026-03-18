@@ -1,0 +1,64 @@
+.video__image {
+    width: 100%;
+}
+
+.video__image img {
+    width: 100%;
+    border-radius: 8pt;
+}
+
+.video__info {
+    display: flex;
+    margin-top: 6pt;
+}
+
+.video__info .profile__img img {
+    width: 32pt;
+    height: 32pt;
+    border-radius: 50%;
+    background: #c5c5c5;
+}
+
+.video__info .video__title {
+    font-weight: 600;
+    font-size: 13pt;
+}
+
+.video__info .video__title__block {
+    position: relative;
+    padding: 0 8pt;
+}
+
+.video__info .video__title__block__info {
+    margin-top: 4pt;
+    display: flex;
+}
+
+.lines__block {
+    margin-top: 6pt;
+    height: 8em;
+    overflow: hidden;
+    position: relative;
+}
+
+.lines__block::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 1.5em;
+    background: linear-gradient(rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 1));
+}
+
+.lines__block .lines__table {
+    position: relative;
+}
+
+.lines__table .timecode {
+    width: 34pt;
+}
+
+.highlighted__text {
+    background-color: #FAD578;
+}
