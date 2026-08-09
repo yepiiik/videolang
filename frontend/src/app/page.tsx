@@ -253,13 +253,16 @@ export default function UnifiedPipelinePage() {
                       {selectedIds.has(video.id) ? <CheckSquare className="w-5 h-5 text-primary" /> : <Square className="w-5 h-5 text-muted-foreground" />}
                     </button>
 
-                    <Link href={`https://youtube.com/watch?v=${video.id}`} target="_blank" className="relative aspect-video bg-muted border-b block shrink-0">
-                      <img src={video.thumbnailUrl} alt={video.title} className="object-cover w-full h-full" />
-                      <div className="absolute inset-0 bg-black/5 group-hover:bg-transparent transition-colors" />
-                      <div className="absolute bottom-2 right-2 bg-black/80 text-white text-[11px] px-2 py-0.5 rounded-md font-medium tracking-wide">
-                        12:45
+                      <div 
+                        onClick={() => toggleVideo(video.id)} 
+                        className="relative aspect-video bg-muted border-b block shrink-0 cursor-pointer"
+                      >
+                        <img src={video.thumbnailUrl} alt={video.title} className="object-cover w-full h-full" />
+                        <div className="absolute inset-0 bg-black/5 group-hover:bg-transparent transition-colors" />
+                        <div className="absolute bottom-2 right-2 bg-black/80 text-white text-[11px] px-2 py-0.5 rounded-md font-medium tracking-wide">
+                          12:45
+                        </div>
                       </div>
-                    </Link>
                     
                     <div className="p-4 flex flex-col flex-1 min-h-0">
                       <h3 className="font-bold text-[15px] leading-tight line-clamp-2 group-hover:text-primary transition-colors mb-2">
@@ -309,7 +312,10 @@ export default function UnifiedPipelinePage() {
                       {/* Left Column: Video Info (Sticky, hugging center) */}
                       <div className="flex flex-col w-full md:pr-6 lg:pr-12">
                         <div className={`w-full max-w-sm ml-auto sticky top-[180px] flex flex-col bg-card border rounded-2xl overflow-hidden transition-all shadow-sm ${selectedIds.has(video.id) ? 'border-primary ring-2 ring-primary/20' : 'hover:border-primary/40'}`}>
-                          <Link href={`https://youtube.com/watch?v=${video.id}`} target="_blank" className="relative aspect-video bg-muted block shrink-0">
+                          <div 
+                            onClick={() => toggleVideo(video.id)} 
+                            className="relative aspect-video bg-muted block shrink-0 cursor-pointer"
+                          >
                             <img src={video.thumbnailUrl} alt={video.title} className="object-cover w-full h-full" />
                             <div className="absolute inset-0 bg-black/5 hover:bg-transparent transition-colors" />
                             <div className="absolute bottom-2 right-2 bg-black/80 text-white text-[11px] px-2 py-0.5 rounded-md font-medium tracking-wide">
@@ -317,12 +323,12 @@ export default function UnifiedPipelinePage() {
                             </div>
                             {/* Checkbox Overlay */}
                             <button 
-                              onClick={(e) => { e.preventDefault(); toggleVideo(video.id); }} 
+                              onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleVideo(video.id); }} 
                               className="absolute top-2 left-2 z-10 bg-background/80 backdrop-blur rounded-md p-1.5 hover:bg-background transition-colors shadow-sm"
                             >
                               {selectedIds.has(video.id) ? <CheckSquare className="w-5 h-5 text-primary" /> : <Square className="w-5 h-5 text-muted-foreground" />}
                             </button>
-                          </Link>
+                          </div>
                           <div className="p-5 flex flex-col">
                             <h3 className="font-bold text-[15px] leading-snug line-clamp-2 hover:text-primary transition-colors mb-2">
                               {video.title}

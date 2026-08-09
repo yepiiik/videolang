@@ -26,6 +26,7 @@ export function Footer() {
           <div className="flex flex-col space-y-3">
             <h4 className="font-semibold text-sm">Company</h4>
             <Link href="/about" className="text-sm text-muted-foreground hover:text-foreground transition-colors">About</Link>
+            <Link href="/contact" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Contact</Link>
             <Link href="/terms" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Terms</Link>
             <Link href="/privacy" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Privacy</Link>
           </div>
