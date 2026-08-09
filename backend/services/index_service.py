@@ -1,6 +1,8 @@
 from services.youtube_service import get_channel_videos
 from services.transcript_service import get_video_transcript
-import time
+from services.chunking_service import chunk_transcript
+
+from database.mongodb import save_video
 
 
 def index_channel(query: str):
@@ -11,7 +13,7 @@ def index_channel(query: str):
             "error": "Channel not found"
         }
 
-    # Временно индексируем только первые 5 видео
+    # Временно обрабатываем только первые 5 видео.
     videos = videos[:5]
 
     indexed = []
@@ -21,19 +23,33 @@ def index_channel(query: str):
         transcript = get_video_transcript(video["video_id"])
 
         if "error" in transcript:
-            print(f"Skipping {video['video_id']}: {transcript['error']}")
+            print(
+                f"Skipping {video['video_id']}: "
+                f"{transcript['error']}"
+            )
+
             failed.append({
                 "video_id": video["video_id"],
                 "reason": transcript["error"]
             })
+
             continue
 
-        indexed.append({
-            "video": video,
-            "transcript": transcript
-        })
+        chunks = chunk_transcript(
+            transcript["transcript"]
+        )
 
-        time.sleep(1)  # Добавляем задержку между запросами, чтобы избежать превышения лимита
+        save_video(
+            video,
+            transcript,
+            chunks
+        )
+
+        indexed.append({
+            "video_id": video["video_id"],
+            "title": video["title"],
+            "chunks": len(chunks)
+        })
 
     return {
         "indexed_videos": len(indexed),
