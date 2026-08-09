@@ -10,6 +10,7 @@ interface ApiKey {
   name: string;
   createdAt: string;
   lastUsedAt: string | null;
+  usage?: number;
 }
 
 export default function ApiKeysPage() {
@@ -33,7 +34,17 @@ export default function ApiKeysPage() {
   const loadData = async () => {
     try {
       const data = await getProfileData();
-      setApiKeys(data.apiKeys);
+      
+      // Fetch usage for each key in parallel from the Python SaaS
+      const { getApiUsage } = await import("@/app/actions/profile.actions");
+      const keysWithUsage = await Promise.all(
+        data.apiKeys.map(async (k) => {
+          const usage = await getApiUsage(k.key);
+          return { ...k, usage };
+        })
+      );
+      
+      setApiKeys(keysWithUsage);
     } catch (error) {
       console.error("Failed to load API keys", error);
     } finally {
@@ -122,6 +133,7 @@ export default function ApiKeysPage() {
                   <tr>
                     <th className="px-6 py-4">Name</th>
                     <th className="px-6 py-4">Key</th>
+                    <th className="px-6 py-4">Requests</th>
                     <th className="px-6 py-4">Created</th>
                     <th className="px-6 py-4">Last Used</th>
                     <th className="px-6 py-4 text-right">Actions</th>
@@ -134,6 +146,7 @@ export default function ApiKeysPage() {
                       <td className="px-6 py-4 font-mono text-muted-foreground tracking-widest">
                         sk_live_••••••••••••{key.key.slice(-4)}
                       </td>
+                      <td className="px-6 py-4 font-bold text-primary">{key.usage ?? 0}</td>
                       <td className="px-6 py-4 text-muted-foreground">{new Date(key.createdAt).toISOString().split('T')[0]}</td>
                       <td className="px-6 py-4 text-muted-foreground">{key.lastUsedAt ? new Date(key.lastUsedAt).toISOString().split('T')[0] : "Never"}</td>
                       <td className="px-6 py-4 text-right flex items-center justify-end gap-2">

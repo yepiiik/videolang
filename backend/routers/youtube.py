@@ -1,5 +1,6 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from database.mongodb import test_connection
+from dependencies.auth import verify_api_key
 
 from services.youtube_service import (
     get_channel_info,
@@ -35,19 +36,19 @@ def database_test():
 
 
 @router.get("/channel")
-def get_channel(query: str):
+def get_channel(query: str, api_key: str = Depends(verify_api_key)):
     return get_channel_info(query)
 
 
 @router.get("/channel/videos")
-def get_videos(query: str):
+def get_videos(query: str, api_key: str = Depends(verify_api_key)):
     return get_channel_videos(query)
 
 
 @router.get("/video/transcript")
-def transcript(video_id: str):
+def transcript(video_id: str, api_key: str = Depends(verify_api_key)):
     return get_video_transcript(video_id)
 
 @router.post("/index/channel")
-def index(query: str):
+def index(query: str, api_key: str = Depends(verify_api_key)):
     return index_channel(query)

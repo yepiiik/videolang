@@ -84,3 +84,27 @@ export async function depositFunds(amount: number, method: string) {
     status: 'Completed',
   });
 }
+
+export async function getApiUsage(apiKey: string) {
+  // Ensure the user is authenticated before allowing them to check usage
+  await getUid();
+  
+  try {
+    const res = await fetch("http://localhost:8000/auth/usage", {
+      headers: {
+        "X-API-Key": apiKey
+      },
+      cache: 'no-store'
+    });
+    
+    if (!res.ok) {
+      return 0;
+    }
+    
+    const data = await res.json();
+    return data.total_requests || 0;
+  } catch (error) {
+    console.error("Failed to fetch API usage from python backend", error);
+    return 0;
+  }
+}
