@@ -1,12 +1,15 @@
 def chunk_transcript(
     transcript: list,
-    max_chars: int = 2000,
-    overlap_chars: int = 200
+    chunk_duration: float = 60.0,
+    overlap_duration: float = 10.0
 ):
     chunks = []
 
+    if not transcript:
+        return chunks
+
     current_parts = []
-    current_length = 0
+    chunk_start = None
 
     for part in transcript:
         text = part["text"].strip()
@@ -14,45 +17,46 @@ def chunk_transcript(
         if not text:
             continue
 
-        # Если добавление следующего subtitle превышает лимит,
-        # сначала сохраняем текущий chunk.
-        if current_parts and current_length + len(text) > max_chars:
-            chunks.append({
-                "start": current_parts[0]["start"],
-                "end": (
-                    current_parts[-1]["start"]
-                    + current_parts[-1]["duration"]
-                ),
-                "text": " ".join(
-                    part["text"] for part in current_parts
-                )
-            })
+        start = float(part["start"])
+        end = start + float(part["duration"])
 
-            # Оставляем небольшой overlap из предыдущего chunk.
-            overlap_parts = []
-            overlap_length = 0
-
-            for previous_part in reversed(current_parts):
-                if overlap_length + len(previous_part["text"]) > overlap_chars:
-                    break
-
-                overlap_parts.insert(0, previous_part)
-                overlap_length += len(previous_part["text"])
-
-            current_parts = overlap_parts
-            current_length = sum(
-                len(part["text"]) for part in current_parts
-            )
+        if chunk_start is None:
+            chunk_start = start
 
         current_parts.append({
             "text": text,
-            "start": part["start"],
-            "duration": part["duration"]
+            "start": start,
+            "duration": float(part["duration"])
         })
 
-        current_length += len(text)
+        # Продолжаем собирать chunk,
+        # пока не достигнем примерно 60 секунд.
+        if end - chunk_start < chunk_duration:
+            continue
 
-    # Последний chunk
+        chunks.append({
+            "start": chunk_start,
+            "end": end,
+            "text": " ".join(
+                part["text"] for part in current_parts
+            )
+        })
+
+        # Начинаем следующий chunk с overlap.
+        overlap_start = end - overlap_duration
+
+        current_parts = [
+            part
+            for part in current_parts
+            if part["start"] >= overlap_start
+        ]
+
+        if current_parts:
+            chunk_start = current_parts[0]["start"]
+        else:
+            chunk_start = None
+
+    # Добавляем остаток transcript.
     if current_parts:
         chunks.append({
             "start": current_parts[0]["start"],
