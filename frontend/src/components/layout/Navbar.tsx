@@ -1,8 +1,12 @@
+"use client";
+
 import Image from "next/image";
 import Link from "next/link";
-import { Search } from "lucide-react";
+import { useAuthViewModel } from "@/viewmodels/useAuthViewModel";
 
 export function Navbar() {
+  const { user } = useAuthViewModel();
+
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background transition-all duration-300 ease-in-out">
       <div className="w-full flex h-16 items-center px-4 md:px-8 xl:px-12">
@@ -29,12 +33,21 @@ export function Navbar() {
             </Link>
           </nav>
           <div className="flex items-center space-x-4">
-            <Link 
-              href="/auth" 
-              className="hidden sm:inline-flex items-center justify-center rounded-lg font-bold transition-colors bg-primary text-primary-foreground hover:bg-primary/90 h-9 px-4 text-sm"
-            >
-              Sign In
-            </Link>
+            {user ? (
+              <Link 
+                href="/profile" 
+                className="hidden sm:inline-flex items-center justify-center rounded-lg font-bold transition-colors bg-secondary text-secondary-foreground hover:bg-secondary/90 border border-border h-9 px-4 text-sm"
+              >
+                Account
+              </Link>
+            ) : (
+              <Link 
+                href="/auth" 
+                className="hidden sm:inline-flex items-center justify-center rounded-lg font-bold transition-colors bg-primary text-primary-foreground hover:bg-primary/90 h-9 px-4 text-sm"
+              >
+                Sign In
+              </Link>
+            )}
           </div>
         </div>
       </div>

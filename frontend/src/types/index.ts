@@ -31,6 +31,7 @@ export interface ApiEndpoint {
   method: "GET" | "POST" | "PUT" | "DELETE";
   path: string;
   title: string;
+  slug: string;
   description: string;
   parameters: {
     name: string;

@@ -2,25 +2,36 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
-import { ArrowRight, Github } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import Image from "next/image";
+import { useAuthViewModel } from "@/viewmodels/useAuthViewModel";
 
 export default function AuthPage() {
   const [isLogin, setIsLogin] = useState(true);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [fullName, setFullName] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
+  const { signInWithGoogle, signInWithEmail, signUpWithEmail, isLoading: isLoadingAuth, error } = useAuthViewModel();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     
-    // Simulate network request
-    setTimeout(() => {
-      setIsLoading(false);
+    try {
+      if (isLogin) {
+        await signInWithEmail(email, password);
+      } else {
+        await signUpWithEmail(email, password, fullName);
+      }
       // Redirect to profile dashboard
       router.push("/profile");
-    }, 800);
+    } catch (err) {
+      // Error is handled by viewmodel and will be displayed via the error state
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -38,6 +49,12 @@ export default function AuthPage() {
           </p>
         </div>
 
+        {error && (
+          <div className="mb-4 p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-500 text-sm text-center">
+            {error}
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} className="space-y-4">
           {!isLogin && (
             <div className="space-y-2">
@@ -45,6 +62,8 @@ export default function AuthPage() {
               <input 
                 type="text" 
                 required 
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
                 className="w-full px-4 py-3 bg-muted/50 border-2 border-transparent focus:border-primary focus:bg-background outline-none rounded-xl transition-all"
                 placeholder="Jane Doe"
               />
@@ -55,6 +74,8 @@ export default function AuthPage() {
             <input 
               type="email" 
               required 
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
               className="w-full px-4 py-3 bg-muted/50 border-2 border-transparent focus:border-primary focus:bg-background outline-none rounded-xl transition-all"
               placeholder="name@example.com"
             />
@@ -67,6 +88,8 @@ export default function AuthPage() {
             <input 
               type="password" 
               required 
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
               className="w-full px-4 py-3 bg-muted/50 border-2 border-transparent focus:border-primary focus:bg-background outline-none rounded-xl transition-all"
               placeholder="••••••••"
             />
@@ -74,10 +97,10 @@ export default function AuthPage() {
 
           <button 
             type="submit"
-            disabled={isLoading}
+            disabled={isLoading || isLoadingAuth}
             className="w-full flex items-center justify-center font-bold text-primary-foreground bg-foreground hover:bg-foreground/90 transition-all shadow-md py-3.5 mt-6 rounded-xl disabled:opacity-50"
           >
-            {isLoading ? (
+            {(isLoading || isLoadingAuth) ? (
               <div className="w-5 h-5 border-2 border-background/30 border-t-background rounded-full animate-spin" />
             ) : (
               <>
@@ -99,13 +122,12 @@ export default function AuthPage() {
 
         <button 
           type="button"
-          disabled={isLoading}
-          onClick={() => {
-            setIsLoading(true);
-            setTimeout(() => {
-              setIsLoading(false);
+          disabled={isLoadingAuth}
+          onClick={async () => {
+            await signInWithGoogle();
+            if (!error) {
               router.push("/profile");
-            }, 800);
+            }
           }}
           className="w-full flex items-center justify-center font-bold text-foreground bg-background hover:bg-muted border-2 border-muted transition-all shadow-sm py-3.5 rounded-xl disabled:opacity-50"
         >
