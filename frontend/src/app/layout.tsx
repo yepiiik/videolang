@@ -1,23 +1,11 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
-import Header from "@/components/ui/header";
-import Footer from "@/components/ui/footer";
-import Sidebar from "@/components/ui/sidebar";
-
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
+import { Navbar } from "@/components/layout/Navbar";
+import { Footer } from "@/components/layout/Footer";
 
 export const metadata: Metadata = {
-  title: "Ucontext",
+  title: "uSearch - Intelligent YouTube Caption Search",
   description: "Find specific information in videos with intelligent search.",
 };
 
@@ -27,16 +15,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html
-      lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
-    >
-      <body className="min-h-full flex flex-col">
-        <Header />
-        <div className="flex-1 flex">
-          <Sidebar />
+    <html lang="en" className="h-full antialiased scroll-smooth">
+      <body className="min-h-full flex flex-col bg-background text-foreground animate-in fade-in duration-500">
+        <Navbar />
+        <main className="flex-1 flex flex-col min-w-0">
           {children}
-        </div>
+        </main>
         <Footer />
       </body>
     </html>
