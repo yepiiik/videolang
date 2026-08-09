@@ -1,4 +1,5 @@
 from fastapi import APIRouter
+from database.mongodb import test_connection
 
 from services.youtube_service import (
     get_channel_info,
@@ -15,6 +16,22 @@ router = APIRouter(
     prefix="/youtube",
     tags=["YouTube"]
 )
+
+@router.get("/database/test")
+def database_test():
+    try:
+        test_connection()
+
+        return {
+            "status": "success",
+            "message": "MongoDB connection is working"
+        }
+
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": str(e)
+        }
 
 
 @router.get("/channel")
