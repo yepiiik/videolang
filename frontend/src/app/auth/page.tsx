@@ -5,30 +5,45 @@ import { useRouter } from "next/navigation";
 import { ArrowRight } from "lucide-react";
 import Image from "next/image";
 import { useAuthViewModel } from "@/viewmodels/useAuthViewModel";
+import { sendVerificationCode, verifyAuthCode } from "@/app/actions/auth.actions";
 
 export default function AuthPage() {
   const [isLogin, setIsLogin] = useState(true);
+  const [signUpStep, setSignUpStep] = useState(1);
   const [email, setEmail] = useState("");
+  const [code, setCode] = useState("");
   const [password, setPassword] = useState("");
-  const [fullName, setFullName] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [customError, setCustomError] = useState<string | null>(null);
   const router = useRouter();
-  const { signInWithGoogle, signInWithEmail, signUpWithEmail, isLoading: isLoadingAuth, error } = useAuthViewModel();
+  const { signInWithGoogle, signInWithEmail, signUpWithEmail, isLoading: isLoadingAuth, error: authError } = useAuthViewModel();
+
+  // Combine local errors with auth model errors
+  const error = customError || authError;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
+    setCustomError(null);
     
     try {
       if (isLogin) {
         await signInWithEmail(email, password);
+        router.push("/profile");
       } else {
-        await signUpWithEmail(email, password, fullName);
+        if (signUpStep === 1) {
+          await sendVerificationCode(email);
+          setSignUpStep(2);
+        } else if (signUpStep === 2) {
+          await verifyAuthCode(email, code);
+          setSignUpStep(3);
+        } else if (signUpStep === 3) {
+          await signUpWithEmail(email, password);
+          router.push("/profile");
+        }
       }
-      // Redirect to profile dashboard
-      router.push("/profile");
-    } catch (err) {
-      // Error is handled by viewmodel and will be displayed via the error state
+    } catch (err: any) {
+      setCustomError(err.message || "An unexpected error occurred");
     } finally {
       setIsLoading(false);
     }
@@ -56,44 +71,53 @@ export default function AuthPage() {
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {!isLogin && (
+          {(isLogin || signUpStep === 1) && (
             <div className="space-y-2">
-              <label className="text-sm font-semibold">Full Name</label>
+              <label className="text-sm font-semibold">Email</label>
               <input 
-                type="text" 
+                type="email" 
                 required 
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
-                className="w-full px-4 py-3 bg-muted/50 border-2 border-transparent focus:border-primary focus:bg-background outline-none rounded-xl transition-all"
-                placeholder="Jane Doe"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                disabled={!isLogin && signUpStep !== 1}
+                className="w-full px-4 py-3 bg-muted/50 border-2 border-transparent focus:border-primary focus:bg-background outline-none rounded-xl transition-all disabled:opacity-50"
+                placeholder="name@example.com"
               />
             </div>
           )}
-          <div className="space-y-2">
-            <label className="text-sm font-semibold">Email</label>
-            <input 
-              type="email" 
-              required 
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-4 py-3 bg-muted/50 border-2 border-transparent focus:border-primary focus:bg-background outline-none rounded-xl transition-all"
-              placeholder="name@example.com"
-            />
-          </div>
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <label className="text-sm font-semibold">Password</label>
-              {isLogin && <a href="#" className="text-xs text-primary font-medium hover:underline">Forgot password?</a>}
+
+          {!isLogin && signUpStep === 2 && (
+            <div className="space-y-2 animate-in fade-in slide-in-from-bottom-2">
+              <label className="text-sm font-semibold">Verification Code</label>
+              <p className="text-xs text-muted-foreground mb-2">We sent a 6-digit code to {email}</p>
+              <input 
+                type="text" 
+                required 
+                maxLength={6}
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+                className="w-full px-4 py-3 bg-muted/50 border-2 border-transparent focus:border-primary focus:bg-background outline-none rounded-xl transition-all tracking-[0.5em] font-mono text-center text-xl"
+                placeholder="000000"
+              />
             </div>
-            <input 
-              type="password" 
-              required 
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-4 py-3 bg-muted/50 border-2 border-transparent focus:border-primary focus:bg-background outline-none rounded-xl transition-all"
-              placeholder="••••••••"
-            />
-          </div>
+          )}
+
+          {(isLogin || signUpStep === 3) && (
+            <div className="space-y-2 animate-in fade-in slide-in-from-bottom-2">
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-semibold">{isLogin ? "Password" : "Create Password"}</label>
+                {isLogin && <a href="#" className="text-xs text-primary font-medium hover:underline">Forgot password?</a>}
+              </div>
+              <input 
+                type="password" 
+                required 
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full px-4 py-3 bg-muted/50 border-2 border-transparent focus:border-primary focus:bg-background outline-none rounded-xl transition-all"
+                placeholder="••••••••"
+              />
+            </div>
+          )}
 
           <button 
             type="submit"
@@ -104,7 +128,14 @@ export default function AuthPage() {
               <div className="w-5 h-5 border-2 border-background/30 border-t-background rounded-full animate-spin" />
             ) : (
               <>
-                {isLogin ? "Sign In" : "Sign Up"}
+                {isLogin 
+                  ? "Sign In" 
+                  : signUpStep === 1 
+                    ? "Continue with Email" 
+                    : signUpStep === 2 
+                      ? "Verify Code" 
+                      : "Create Account"
+                }
                 <ArrowRight className="ml-2 w-4 h-4" />
               </>
             )}
@@ -143,7 +174,11 @@ export default function AuthPage() {
         <div className="mt-6 flex items-center justify-center space-x-2 text-sm text-muted-foreground">
           <span>{isLogin ? "Don't have an account?" : "Already have an account?"}</span>
           <button 
-            onClick={() => setIsLogin(!isLogin)} 
+            onClick={() => {
+              setIsLogin(!isLogin);
+              setSignUpStep(1);
+              setCustomError(null);
+            }} 
             className="text-foreground font-bold hover:underline"
           >
             {isLogin ? "Sign Up" : "Sign In"}

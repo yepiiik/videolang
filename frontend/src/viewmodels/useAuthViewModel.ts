@@ -65,12 +65,9 @@ export function useAuthViewModel() {
     return handleAuthAction(() => firebaseSignInWithEmail(auth, email, password));
   };
 
-  const signUpWithEmail = (email: string, password: string, name?: string) => {
+  const signUpWithEmail = (email: string, password: string) => {
     return handleAuthAction(async () => {
       const cred = await firebaseSignUpWithEmail(auth, email, password);
-      if (name) {
-        await updateProfile(cred.user, { displayName: name });
-      }
       return cred;
     });
   };
