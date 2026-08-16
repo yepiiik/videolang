@@ -2,6 +2,8 @@ from fastapi import APIRouter, Depends
 from database.mongodb import test_connection
 from dependencies.auth import verify_api_key
 from services.embedding_service import create_embedding
+from services.search_service import semantic_search
+
 
 from services.youtube_service import (
     get_channel_info,
@@ -63,3 +65,7 @@ def transcript(video_id: str, api_key: str = Depends(verify_api_key)):
 @router.post("/index/channel")
 def index(query: str, api_key: str = Depends(verify_api_key)):
     return index_channel(query)
+
+@router.get("/search")
+def search(query: str):
+    return semantic_search(query)

@@ -8,7 +8,7 @@ client = MongoClient(
     MONGODB_URI,
     server_api=ServerApi(
         version="1",
-        strict=True,
+        strict=False,
         deprecation_errors=True
     )
 )
