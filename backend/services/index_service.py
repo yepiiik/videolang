@@ -1,6 +1,7 @@
 from services.youtube_service import get_channel_videos
 from services.transcript_service import get_video_transcript
 from services.chunking_service import chunk_transcript
+from services.embedding_service import create_embedding
 
 from database.mongodb import save_video
 
@@ -13,7 +14,7 @@ def index_channel(query: str):
             "error": "Channel not found"
         }
 
-    # Временно обрабатываем только первые 5 видео.
+    # Пока работаем только с первыми 5 видео.
     videos = videos[:5]
 
     indexed = []
@@ -39,16 +40,30 @@ def index_channel(query: str):
             transcript["transcript"]
         )
 
+        embedded_chunks = []
+
+        for chunk in chunks:
+            embedding = create_embedding(
+                chunk["text"]
+            )
+
+            embedded_chunks.append({
+                "start": chunk["start"],
+                "end": chunk["end"],
+                "text": chunk["text"],
+                "embedding": embedding
+            })
+
         save_video(
             video,
             transcript,
-            chunks
+            embedded_chunks
         )
 
         indexed.append({
             "video_id": video["video_id"],
             "title": video["title"],
-            "chunks": len(chunks)
+            "chunks": len(embedded_chunks)
         })
 
     return {
