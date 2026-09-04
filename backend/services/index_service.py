@@ -1,36 +1,167 @@
 from services.youtube_service import get_channel_videos
 from services.transcript_service import get_video_transcript
 from services.chunking_service import chunk_transcript
-from services.embedding_service import create_embedding
+from services.embedding_service import create_embeddings
 
-from database.mongodb import save_video
+from database.mongodb import (
+    save_video,
+    video_already_indexed
+)
 
 
-def index_channel(query: str):
-    videos = get_channel_videos(query)
+def build_time_windows(
+    transcript: list,
+    start: float,
+    end: float,
+    window_duration: float = 12.0,
+    overlap_duration: float = 4.0
+):
+    relevant_parts = []
+
+    for part in transcript:
+        part_start = float(part["start"])
+        part_end = part_start + float(part["duration"])
+
+        if part_end >= start and part_start <= end:
+            relevant_parts.append(part)
+
+    if not relevant_parts:
+        return []
+
+    windows = []
+    current_parts = []
+    window_start = None
+
+    for part in relevant_parts:
+        text = part["text"].strip()
+
+        if not text:
+            continue
+
+        part_start = float(part["start"])
+        part_end = part_start + float(part["duration"])
+
+        if window_start is None:
+            window_start = part_start
+
+        current_parts.append(part)
+
+        if part_end - window_start < window_duration:
+            continue
+
+        windows.append({
+            "start": window_start,
+            "end": part_end,
+            "text": " ".join(
+                p["text"].strip()
+                for p in current_parts
+            )
+        })
+
+        overlap_start = part_end - overlap_duration
+
+        current_parts = [
+            p
+            for p in current_parts
+            if float(p["start"]) >= overlap_start
+        ]
+
+        if current_parts:
+            window_start = float(current_parts[0]["start"])
+        else:
+            window_start = None
+
+    if current_parts:
+        windows.append({
+            "start": float(current_parts[0]["start"]),
+            "end": (
+                float(current_parts[-1]["start"])
+                + float(current_parts[-1]["duration"])
+            ),
+            "text": " ".join(
+                p["text"].strip()
+                for p in current_parts
+            )
+        })
+
+    return windows
+
+
+def add_window_embeddings(
+    transcript: list,
+    chunk: dict
+):
+    windows = build_time_windows(
+        transcript,
+        chunk["start"],
+        chunk["end"],
+        window_duration=12.0,
+        overlap_duration=4.0
+    )
+
+    if not windows:
+        return []
+
+    texts = [
+        window["text"]
+        for window in windows
+    ]
+
+    embeddings = create_embeddings(texts)
+
+    embedded_windows = []
+
+    for window, embedding in zip(windows, embeddings):
+        embedded_windows.append({
+            "start": window["start"],
+            "end": window["end"],
+            "text": window["text"],
+            "embedding": embedding
+        })
+
+    return embedded_windows
+
+
+def index_channel(url_info: dict):
+    videos = get_channel_videos(url_info)
 
     if not videos:
         return {
             "error": "Channel not found"
         }
 
-    # Пока работаем только с первыми 5 видео.
+    # Пока обрабатываем только первые 5 видео.
     videos = videos[:5]
 
     indexed = []
+    skipped = []
     failed = []
 
     for video in videos:
-        transcript = get_video_transcript(video["video_id"])
+        video_id = video["video_id"]
+
+        if video_already_indexed(video_id):
+            print(
+                f"Skipping {video_id}: already indexed"
+            )
+
+            skipped.append({
+                "video_id": video_id,
+                "title": video["title"]
+            })
+
+            continue
+
+        transcript = get_video_transcript(video_id)
 
         if "error" in transcript:
             print(
-                f"Skipping {video['video_id']}: "
+                f"Skipping {video_id}: "
                 f"{transcript['error']}"
             )
 
             failed.append({
-                "video_id": video["video_id"],
+                "video_id": video_id,
                 "reason": transcript["error"]
             })
 
@@ -43,15 +174,23 @@ def index_channel(query: str):
         embedded_chunks = []
 
         for chunk in chunks:
-            embedding = create_embedding(
-                chunk["text"]
+            # Основной embedding chunk.
+            chunk_embedding = create_embeddings(
+                [chunk["text"]]
+            )[0]
+
+            # Более мелкие окна внутри chunk.
+            embedded_windows = add_window_embeddings(
+                transcript["transcript"],
+                chunk
             )
 
             embedded_chunks.append({
                 "start": chunk["start"],
                 "end": chunk["end"],
                 "text": chunk["text"],
-                "embedding": embedding
+                "embedding": chunk_embedding,
+                "windows": embedded_windows
             })
 
         save_video(
@@ -68,7 +207,9 @@ def index_channel(query: str):
 
     return {
         "indexed_videos": len(indexed),
+        "skipped_videos": len(skipped),
         "failed_videos": len(failed),
-        "failed": failed,
-        "videos": indexed
+        "indexed": indexed,
+        "skipped": skipped,
+        "failed": failed
     }
