@@ -17,7 +17,10 @@ export function Navbar() {
         <div className="flex flex-1 items-center justify-end space-x-6">
           <nav className="hidden md:flex items-center space-x-6 text-sm font-medium text-muted-foreground">
             <Link href="/" className="transition-colors hover:text-foreground">
-              Features
+              Search
+            </Link>
+            <Link href="/about" className="transition-colors hover:text-foreground">
+              About
             </Link>
             <Link href="/pricing" className="transition-colors hover:text-foreground">
               Pricing
@@ -25,24 +28,18 @@ export function Navbar() {
             <Link href="/docs" className="transition-colors hover:text-foreground">
               Docs
             </Link>
-            <Link href="/about" className="transition-colors hover:text-foreground">
-              About
-            </Link>
-            <Link href="/profile" className="transition-colors hover:text-foreground">
-              Dashboard
-            </Link>
           </nav>
           <div className="flex items-center space-x-4">
             {user ? (
-              <Link 
-                href="/profile" 
+              <Link
+                href="/profile"
                 className="hidden sm:inline-flex items-center justify-center rounded-lg font-bold transition-colors bg-secondary text-secondary-foreground hover:bg-secondary/90 border border-border h-9 px-4 text-sm"
               >
                 Account
               </Link>
             ) : (
-              <Link 
-                href="/auth" 
+              <Link
+                href="/auth"
                 className="hidden sm:inline-flex items-center justify-center rounded-lg font-bold transition-colors bg-primary text-primary-foreground hover:bg-primary/90 h-9 px-4 text-sm"
               >
                 Sign In

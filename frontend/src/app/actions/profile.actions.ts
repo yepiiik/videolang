@@ -67,6 +67,13 @@ export async function applyScheduledPlan() {
     method: 'System',
     status: 'Completed',
   });
+  
+  // Tell the python backend to clear the cached rate limit for this user
+  try {
+    await fetch(`http://localhost:8000/auth/clear-cache/${uid}`, { method: 'POST' });
+  } catch (error) {
+    console.error("Failed to clear rate limit cache in python backend", error);
+  }
 }
 
 export async function depositFunds(amount: number, method: string) {

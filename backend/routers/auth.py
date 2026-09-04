@@ -19,3 +19,18 @@ def get_usage(api_key: str = Depends(verify_api_key)):
         "api_key": api_key,
         "total_requests": total_usage
     }
+
+@router.post("/clear-cache/{uid}")
+def clear_cache(uid: str):
+    """
+    Clears the cached limit for all API keys belonging to the UID in MongoDB.
+    This forces a re-fetch of the limit from Firestore on the next request.
+    Called by the Next.js frontend when a user upgrades their plan.
+    """
+    from services.usage_tracker import api_usage_collection
+    result = api_usage_collection.update_many(
+        {"uid": uid}, 
+        {"$unset": {"limit": ""}}
+    )
+    return {"message": "Cache cleared", "keys_affected": result.modified_count}
+

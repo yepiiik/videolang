@@ -3,22 +3,36 @@
 import { useState } from "react";
 import { Mail, MapPin, MessageSquare, ArrowRight } from "lucide-react";
 
+import { submitContactForm } from "@/app/actions/contact.actions";
+
 export default function ContactPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [message, setMessage] = useState("");
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
     
-    // Simulate form submission
-    setTimeout(() => {
-      setIsSubmitting(false);
+    try {
+      await submitContactForm(name, email, message);
       setIsSuccess(true);
       
       // Reset success state after a few seconds
-      setTimeout(() => setIsSuccess(false), 5000);
-    }, 1200);
+      setTimeout(() => {
+        setIsSuccess(false);
+        setName("");
+        setEmail("");
+        setMessage("");
+      }, 5000);
+    } catch (error) {
+      console.error("Failed to send message", error);
+      alert("Failed to send message. Please try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -99,6 +113,8 @@ export default function ContactPage() {
                     id="name"
                     type="text" 
                     required 
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
                     className="w-full px-4 py-3.5 bg-muted/50 border-2 border-transparent focus:border-primary focus:bg-background outline-none rounded-xl transition-all"
                     placeholder="John Doe"
                   />
@@ -110,6 +126,8 @@ export default function ContactPage() {
                     id="email"
                     type="email" 
                     required 
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
                     className="w-full px-4 py-3.5 bg-muted/50 border-2 border-transparent focus:border-primary focus:bg-background outline-none rounded-xl transition-all"
                     placeholder="name@example.com"
                   />
@@ -121,6 +139,8 @@ export default function ContactPage() {
                     id="message"
                     required 
                     rows={5}
+                    value={message}
+                    onChange={(e) => setMessage(e.target.value)}
                     className="w-full px-4 py-3.5 bg-muted/50 border-2 border-transparent focus:border-primary focus:bg-background outline-none rounded-xl transition-all resize-none"
                     placeholder="How can we help you?"
                   />
