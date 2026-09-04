@@ -9,26 +9,30 @@ youtube = build(
 )
 
 
-def get_channel_id(query: str):
-    request = youtube.search().list(
-        part="snippet",
-        q=query,
-        type="channel",
-        maxResults=1
-    )
+def get_channel_id(url_info: dict):
+    if url_info["type"] == "channel":
+        return url_info["id"]
 
-    response = request.execute()
+    if url_info["type"] == "channel_handle":
+        request = youtube.channels().list(
+            part="id",
+            forHandle=url_info["id"]
+        )
 
-    items = response.get("items", [])
+        response = request.execute()
 
-    if not items:
-        return None
+        items = response.get("items", [])
 
-    return items[0]["snippet"]["channelId"]
+        if not items:
+            return None
+
+        return items[0]["id"]
+
+    return None
 
 
-def get_channel_info(query: str):
-    channel_id = get_channel_id(query)
+def get_channel_info(url_info: dict):
+    channel_id = get_channel_id(url_info)
 
     if channel_id is None:
         return None
@@ -40,19 +44,27 @@ def get_channel_info(query: str):
 
     response = request.execute()
 
-    if not response["items"]:
+    items = response.get("items", [])
+
+    if not items:
         return None
 
-    channel = response["items"][0]
+    channel = items[0]
 
     return {
         "channel_id": channel_id,
         "title": channel["snippet"]["title"],
         "description": channel["snippet"]["description"],
         "thumbnail": channel["snippet"]["thumbnails"]["high"]["url"],
-        "subscriber_count": int(channel["statistics"].get("subscriberCount", 0)),
-        "video_count": int(channel["statistics"].get("videoCount", 0)),
-        "view_count": int(channel["statistics"].get("viewCount", 0))
+        "subscriber_count": int(
+            channel["statistics"].get("subscriberCount", 0)
+        ),
+        "video_count": int(
+            channel["statistics"].get("videoCount", 0)
+        ),
+        "view_count": int(
+            channel["statistics"].get("viewCount", 0)
+        )
     }
 
 
@@ -84,7 +96,6 @@ def get_playlist_videos(playlist_id: str):
     videos = []
 
     for item in response.get("items", []):
-
         snippet = item["snippet"]
 
         videos.append({
@@ -98,8 +109,8 @@ def get_playlist_videos(playlist_id: str):
     return videos
 
 
-def get_channel_videos(query: str):
-    channel_id = get_channel_id(query)
+def get_channel_videos(url_info: dict):
+    channel_id = get_channel_id(url_info)
 
     if channel_id is None:
         return None

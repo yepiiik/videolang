@@ -1,9 +1,6 @@
-from fastapi import APIRouter, Depends
-from database.mongodb import test_connection
-from dependencies.auth import verify_api_key
-from services.embedding_service import create_embedding
-from services.search_service import semantic_search
+from fastapi import APIRouter, HTTPException
 
+from services.youtube_url_parser import parse_youtube_url
 
 from services.youtube_service import (
     get_channel_info,
@@ -16,20 +13,105 @@ from services.transcript_service import (
 
 from services.index_service import index_channel
 
+from services.search_service import semantic_search
+
+from services.embedding_service import create_embedding
+
+from database.mongodb import test_connection
+
+
 router = APIRouter(
     prefix="/youtube",
     tags=["YouTube"]
 )
 
-@router.get("/embedding/test")
-def embedding_test(text: str):
-    embedding = create_embedding(text)
 
-    return {
-        "text": text,
-        "dimensions": len(embedding),
-        "embedding": embedding
-    }
+@router.get("/channel")
+def get_channel(url: str):
+    parsed_url = parse_youtube_url(url)
+
+    if parsed_url is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid YouTube URL"
+        )
+
+    if parsed_url["type"] not in {
+        "channel",
+        "channel_handle"
+    }:
+        raise HTTPException(
+            status_code=400,
+            detail="URL must point to a YouTube channel"
+        )
+
+    result = get_channel_info(parsed_url)
+
+    if result is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Channel not found"
+        )
+
+    return result
+
+
+@router.get("/channel/videos")
+def get_videos(url: str):
+    parsed_url = parse_youtube_url(url)
+
+    if parsed_url is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid YouTube URL"
+        )
+
+    if parsed_url["type"] not in {
+        "channel",
+        "channel_handle"
+    }:
+        raise HTTPException(
+            status_code=400,
+            detail="URL must point to a YouTube channel"
+        )
+
+    result = get_channel_videos(parsed_url)
+
+    if result is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Channel not found"
+        )
+
+    return result
+
+
+@router.get("/video/transcript")
+def transcript(video_id: str):
+    return get_video_transcript(video_id)
+
+
+@router.post("/index/channel")
+def index(url: str):
+    parsed_url = parse_youtube_url(url)
+
+    if parsed_url is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid YouTube URL"
+        )
+
+    if parsed_url["type"] not in {
+        "channel",
+        "channel_handle"
+    }:
+        raise HTTPException(
+            status_code=400,
+            detail="URL must point to a YouTube channel"
+        )
+
+    return index_channel(parsed_url)
+
 
 @router.get("/database/test")
 def database_test():
@@ -48,23 +130,16 @@ def database_test():
         }
 
 
-@router.get("/channel")
-def get_channel(query: str, api_key: str = Depends(verify_api_key)):
-    return get_channel_info(query)
+@router.get("/embedding/test")
+def embedding_test(text: str):
+    embedding = create_embedding(text)
 
+    return {
+        "text": text,
+        "dimensions": len(embedding),
+        "embedding": embedding
+    }
 
-@router.get("/channel/videos")
-def get_videos(query: str, api_key: str = Depends(verify_api_key)):
-    return get_channel_videos(query)
-
-
-@router.get("/video/transcript")
-def transcript(video_id: str, api_key: str = Depends(verify_api_key)):
-    return get_video_transcript(video_id)
-
-@router.post("/index/channel")
-def index(query: str, api_key: str = Depends(verify_api_key)):
-    return index_channel(query)
 
 @router.get("/search")
 def search(query: str, api_key: str = Depends(verify_api_key)):

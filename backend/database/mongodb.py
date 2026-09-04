@@ -22,6 +22,20 @@ def test_connection():
     return True
 
 
+def video_already_indexed(video_id: str) -> bool:
+    existing_video = videos_collection.find_one(
+        {
+            "video_id": video_id,
+            "chunks.0.embedding": {"$exists": True}
+        },
+        {
+            "_id": 1
+        }
+    )
+
+    return existing_video is not None
+
+
 def save_video(video: dict, transcript: dict, chunks: list):
     document = {
         "video_id": video["video_id"],
