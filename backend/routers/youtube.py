@@ -67,5 +67,5 @@ def index(query: str, api_key: str = Depends(verify_api_key)):
     return index_channel(query)
 
 @router.get("/search")
-def search(query: str):
+def search(query: str, api_key: str = Depends(verify_api_key)):
     return semantic_search(query)

@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Search, Link as LinkIcon, CheckSquare, Square, Download, ChevronDown, Sparkles, Code2, ArrowRight, X, LayoutGrid, List as ListIcon } from "lucide-react";
-import { MOCK_VIDEOS } from "@/lib/mock-data";
+import { Video, SearchResult } from "@/types";
 import Link from "next/link";
 
 type SearchType = "intelligent" | "regex";
@@ -22,7 +22,10 @@ export default function UnifiedPipelinePage() {
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [isProcessing, setIsProcessing] = useState(false);
 
-  const handleLoad = (e: React.FormEvent) => {
+  const [loadedVideos, setLoadedVideos] = useState<Video[]>([]);
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+
+  const handleLoad = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!sourceUrl.trim()) {
       alert("Please enter a valid YouTube channel, playlist, or video URL.");
@@ -30,10 +33,21 @@ export default function UnifiedPipelinePage() {
     }
     
     setIsLoading(true);
-    setTimeout(() => {
+    try {
+      const res = await fetch(`/api/youtube/index?query=${encodeURIComponent(sourceUrl)}`, { method: "POST" });
+      const data = await res.json();
+      if (data.videos) {
+        setLoadedVideos(data.videos);
+        setHasLoaded(true);
+      } else {
+        alert("Failed to load: " + (data.error || "Unknown error"));
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Error loading source");
+    } finally {
       setIsLoading(false);
-      setHasLoaded(true);
-    }, 800);
+    }
   };
 
   const clearSource = () => {
@@ -41,25 +55,150 @@ export default function UnifiedPipelinePage() {
     setSourceUrl("");
     setSearchQuery("");
     setSelectedIds(new Set());
+    setLoadedVideos([]);
+    setSearchResults([]);
   };
+
+  // Perform intelligent search when query changes (only if mode is 'intelligent')
+  useEffect(() => {
+    if (!searchQuery.trim() || searchType !== 'intelligent') {
+      setSearchResults([]);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/youtube/search?query=${encodeURIComponent(searchQuery)}`);
+        const data = await res.json();
+        if (Array.isArray(data)) {
+           // filter data to only include videos from loadedVideos
+           const loadedIds = new Set(loadedVideos.map(v => v.video_id));
+           setSearchResults(data.filter(r => loadedIds.has(r.video_id)));
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [searchQuery, loadedVideos, searchType]);
 
   const filteredResults = useMemo(() => {
     if (!hasLoaded) return [];
     
-    const q = searchQuery.toLowerCase().trim();
+    // If query is empty, show all videos with all chunks
+    if (!searchQuery.trim()) {
+      return loadedVideos.map(v => {
+        const initialCaptions = (v.chunks || []).map((c: any, index: number) => {
+          const minutes = Math.floor(c.start / 60);
+          const seconds = Math.floor(c.start % 60);
+          const timecode = `${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
+          
+          return {
+            id: `chunk_${index}`,
+            timecode: timecode,
+            seconds: Math.floor(c.start),
+            start: c.start,
+            end: c.end,
+            text: c.text
+          };
+        });
+
+        return {
+          ...v,
+          id: v.video_id,
+          thumbnailUrl: `https://img.youtube.com/vi/${v.video_id}/hqdefault.jpg`,
+          captions: initialCaptions
+        };
+      });
+    }
+
+    if (searchType === 'regex') {
+      // Regex Search: filter local chunks directly
+      let regex: RegExp;
+      try {
+        regex = new RegExp(searchQuery, 'gi');
+      } catch (e) {
+        // Invalid regex, return empty or treat as normal string
+        // Falling back to simple includes
+        const q = searchQuery.toLowerCase();
+        return loadedVideos.map(v => {
+          const filteredCaptions = (v.chunks || []).filter((c: any) => c.text.toLowerCase().includes(q)).map((c: any, index: number) => {
+            const minutes = Math.floor(c.start / 60);
+            const seconds = Math.floor(c.start % 60);
+            const timecode = `${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
+            return {
+              id: `chunk_${index}`,
+              timecode: timecode,
+              seconds: Math.floor(c.start),
+              start: c.start,
+              end: c.end,
+              text: c.text
+            };
+          });
+          return {
+            ...v,
+            id: v.video_id,
+            thumbnailUrl: `https://img.youtube.com/vi/${v.video_id}/hqdefault.jpg`,
+            captions: filteredCaptions
+          };
+        }).filter(v => v.captions.length > 0);
+      }
+
+      return loadedVideos.map(v => {
+        const filteredCaptions = (v.chunks || []).filter((c: any) => regex.test(c.text)).map((c: any, index: number) => {
+          const minutes = Math.floor(c.start / 60);
+          const seconds = Math.floor(c.start % 60);
+          const timecode = `${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
+          return {
+            id: `chunk_${index}`,
+            timecode: timecode,
+            seconds: Math.floor(c.start),
+            start: c.start,
+            end: c.end,
+            text: c.text
+          };
+        });
+        return {
+          ...v,
+          id: v.video_id,
+          thumbnailUrl: `https://img.youtube.com/vi/${v.video_id}/hqdefault.jpg`,
+          captions: filteredCaptions
+        };
+      }).filter(v => v.captions.length > 0);
+    }
+
+    // Intelligent Search: use results from backend embedding search
+    const videoMap = new Map();
     
-    return MOCK_VIDEOS.map(video => {
-      if (!q) return video; // Return full video if no query
+    for (const r of searchResults) {
+      if (!videoMap.has(r.video_id)) {
+        const videoInfo = loadedVideos.find(v => v.video_id === r.video_id);
+        if (videoInfo) {
+          videoMap.set(r.video_id, {
+            ...videoInfo,
+            id: r.video_id,
+            thumbnailUrl: `https://img.youtube.com/vi/${r.video_id}/hqdefault.jpg`,
+            captions: []
+          });
+        }
+      }
       
-      // Filter captions matching query
-      const filteredCaptions = video.captions.filter(c => c.text.toLowerCase().includes(q));
-      
-      return {
-        ...video,
-        captions: filteredCaptions
-      };
-    }).filter(video => video.captions.length > 0); // Only keep videos with matching captions
-  }, [hasLoaded, searchQuery]);
+      const vid = videoMap.get(r.video_id);
+      if (vid) {
+        const minutes = Math.floor(r.start / 60);
+        const seconds = Math.floor(r.start % 60);
+        const timecode = `${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
+        
+        vid.captions.push({
+          id: Math.random().toString(36).substring(7),
+          timecode: timecode,
+          seconds: Math.floor(r.start),
+          text: r.text
+        });
+      }
+    }
+    
+    return Array.from(videoMap.values());
+  }, [hasLoaded, searchQuery, loadedVideos, searchResults, searchType]);
 
   const toggleAll = () => {
     if (selectedIds.size === filteredResults.length) {

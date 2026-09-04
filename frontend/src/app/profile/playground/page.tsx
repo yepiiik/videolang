@@ -12,13 +12,35 @@ export default function PlaygroundPage() {
   const [isSending, setIsSending] = useState(false);
   const [responseOutput, setResponseOutput] = useState<string | null>(null);
 
-  const handleSendRequest = () => {
+  const handleSendRequest = async () => {
     setIsSending(true);
     setResponseOutput(null);
-    setTimeout(() => {
+    try {
+      let url = selectedEndpoint.path;
+      const queryParams = new URLSearchParams();
+      
+      // Add parameters to query string
+      for (const [key, value] of Object.entries(playgroundParams)) {
+        if (value) {
+          queryParams.append(key, value);
+        }
+      }
+      
+      if (queryParams.toString()) {
+        url += `?${queryParams.toString()}`;
+      }
+
+      const res = await fetch(url, {
+        method: selectedEndpoint.method,
+      });
+
+      const data = await res.json();
+      setResponseOutput(JSON.stringify(data, null, 2));
+    } catch (error: any) {
+      setResponseOutput(JSON.stringify({ error: error.message }, null, 2));
+    } finally {
       setIsSending(false);
-      setResponseOutput(JSON.stringify(selectedEndpoint.sampleResponse, null, 2));
-    }, 600); // Simulate network latency
+    }
   };
 
   return (

@@ -63,7 +63,8 @@ def index_channel(query: str):
         indexed.append({
             "video_id": video["video_id"],
             "title": video["title"],
-            "chunks": len(embedded_chunks)
+            "chunks_count": len(embedded_chunks),
+            "chunks": chunks
         })
 
     return {
