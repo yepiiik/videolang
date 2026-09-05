@@ -1,4 +1,5 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
+from dependencies.auth import verify_api_key
 
 from services.youtube_url_parser import parse_youtube_url
 
@@ -27,8 +28,8 @@ router = APIRouter(
 
 
 @router.get("/channel")
-def get_channel(url: str):
-    parsed_url = parse_youtube_url(url)
+def get_channel(query: str):
+    parsed_url = parse_youtube_url(query)
 
     if parsed_url is None:
         raise HTTPException(
@@ -57,8 +58,8 @@ def get_channel(url: str):
 
 
 @router.get("/channel/videos")
-def get_videos(url: str):
-    parsed_url = parse_youtube_url(url)
+def get_videos(query: str):
+    parsed_url = parse_youtube_url(query)
 
     if parsed_url is None:
         raise HTTPException(
@@ -92,8 +93,8 @@ def transcript(video_id: str):
 
 
 @router.post("/index/channel")
-def index(url: str):
-    parsed_url = parse_youtube_url(url)
+def index(query: str):
+    parsed_url = parse_youtube_url(query)
 
     if parsed_url is None:
         raise HTTPException(

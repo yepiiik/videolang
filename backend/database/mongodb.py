@@ -36,6 +36,13 @@ def video_already_indexed(video_id: str) -> bool:
     return existing_video is not None
 
 
+def get_video(video_id: str) -> dict:
+    return videos_collection.find_one(
+        {"video_id": video_id},
+        {"_id": 0}
+    )
+
+
 def save_video(video: dict, transcript: dict, chunks: list):
     document = {
         "video_id": video["video_id"],

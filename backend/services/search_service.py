@@ -38,7 +38,17 @@ def find_best_window(
     windows = chunk.get("windows", [])
 
     if not windows:
-        return None
+        # Fallback to the main chunk for older indexed videos without windows
+        chunk_embedding = chunk.get("embedding", [])
+        score = 0.0
+        if chunk_embedding:
+            score = cosine_similarity(query_embedding, chunk_embedding)
+        return {
+            "start": chunk.get("start", 0),
+            "end": chunk.get("end", 0),
+            "text": chunk.get("text", ""),
+            "score": score
+        }
 
     best_window = None
     best_score = -1.0
@@ -168,11 +178,5 @@ def semantic_search(
         result["timestamp_score"],
         reverse=True
     )
-
-    formatted_results = [
-        result
-        for result in formatted_results
-        if result["timestamp_score"] >= 0.50
-    ]
 
     return formatted_results[:limit]

@@ -5,7 +5,8 @@ from services.embedding_service import create_embeddings
 
 from database.mongodb import (
     save_video,
-    video_already_indexed
+    video_already_indexed,
+    get_video
 )
 
 
@@ -136,6 +137,7 @@ def index_channel(url_info: dict):
     indexed = []
     skipped = []
     failed = []
+    frontend_videos = []
 
     for video in videos:
         video_id = video["video_id"]
@@ -149,6 +151,37 @@ def index_channel(url_info: dict):
                 "video_id": video_id,
                 "title": video["title"]
             })
+            
+            existing_video = get_video(video_id)
+            if existing_video:
+                frontend_chunks = []
+                for ec in existing_video.get("chunks", []):
+                    windows = ec.get("windows", [])
+                    if not windows:
+                        windows = [{
+                            "start": ec.get("start"),
+                            "end": ec.get("end"),
+                            "text": ec.get("text")
+                        }]
+                    frontend_chunks.append({
+                        "start": ec.get("start"),
+                        "end": ec.get("end"),
+                        "text": ec.get("text"),
+                        "windows": [
+                            {
+                                "start": w.get("start"),
+                                "end": w.get("end"),
+                                "text": w.get("text")
+                            } for w in windows
+                        ]
+                    })
+
+                frontend_videos.append({
+                    "video_id": existing_video["video_id"],
+                    "title": existing_video["title"],
+                    "chunks_count": len(frontend_chunks),
+                    "chunks": frontend_chunks
+                })
 
             continue
 
@@ -198,13 +231,31 @@ def index_channel(url_info: dict):
             transcript,
             embedded_chunks
         )
-
-        indexed.append({
+        
+        frontend_chunks = []
+        for ec in embedded_chunks:
+            frontend_chunks.append({
+                "start": ec["start"],
+                "end": ec["end"],
+                "text": ec["text"],
+                "windows": [
+                    {
+                        "start": w["start"],
+                        "end": w["end"],
+                        "text": w["text"]
+                    } for w in ec.get("windows", [])
+                ]
+            })
+        
+        frontend_video = {
             "video_id": video["video_id"],
             "title": video["title"],
             "chunks_count": len(embedded_chunks),
-            "chunks": chunks
-        })
+            "chunks": frontend_chunks
+        }
+
+        indexed.append(frontend_video)
+        frontend_videos.append(frontend_video)
 
     return {
         "indexed_videos": len(indexed),
@@ -212,5 +263,6 @@ def index_channel(url_info: dict):
         "failed_videos": len(failed),
         "indexed": indexed,
         "skipped": skipped,
-        "failed": failed
+        "failed": failed,
+        "videos": frontend_videos
     }

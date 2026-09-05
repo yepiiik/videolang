@@ -59,46 +59,55 @@ export default function UnifiedPipelinePage() {
     setSearchResults([]);
   };
 
-  // Perform intelligent search when query changes (only if mode is 'intelligent')
-  useEffect(() => {
+  const [isSearching, setIsSearching] = useState(false);
+
+  const handleIntelligentSearch = async () => {
     if (!searchQuery.trim() || searchType !== 'intelligent') {
       setSearchResults([]);
       return;
     }
-    const timer = setTimeout(async () => {
-      try {
-        const res = await fetch(`/api/youtube/search?query=${encodeURIComponent(searchQuery)}`);
-        const data = await res.json();
-        if (Array.isArray(data)) {
-           // filter data to only include videos from loadedVideos
-           const loadedIds = new Set(loadedVideos.map(v => v.video_id));
-           setSearchResults(data.filter(r => loadedIds.has(r.video_id)));
-        }
-      } catch (err) {
-        console.error(err);
+    setIsSearching(true);
+    try {
+      const res = await fetch(`/api/youtube/search?query=${encodeURIComponent(searchQuery)}`);
+      const data = await res.json();
+      if (Array.isArray(data)) {
+         // filter data to only include videos from loadedVideos
+         const loadedIds = new Set(loadedVideos.map(v => v.video_id));
+         setSearchResults(data.filter(r => loadedIds.has(r.video_id)));
       }
-    }, 500);
-    return () => clearTimeout(timer);
-  }, [searchQuery, loadedVideos, searchType]);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  // Clear search results when switching back to intelligent search if query is empty
+  useEffect(() => {
+    if (searchType === 'intelligent' && !searchQuery.trim()) {
+      setSearchResults([]);
+    }
+  }, [searchType, searchQuery]);
 
   const filteredResults = useMemo(() => {
     if (!hasLoaded) return [];
     
-    // If query is empty, show all videos with all chunks
+    // If query is empty, show all videos with all windows
     if (!searchQuery.trim()) {
       return loadedVideos.map(v => {
-        const initialCaptions = (v.chunks || []).map((c: any, index: number) => {
-          const minutes = Math.floor(c.start / 60);
-          const seconds = Math.floor(c.start % 60);
+        const allWindows = (v.chunks || []).flatMap((c: any) => c.windows || []);
+        const initialCaptions = allWindows.map((w: any, index: number) => {
+          const minutes = Math.floor(w.start / 60);
+          const seconds = Math.floor(w.start % 60);
           const timecode = `${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
           
           return {
-            id: `chunk_${index}`,
+            id: `window_${index}`,
             timecode: timecode,
-            seconds: Math.floor(c.start),
-            start: c.start,
-            end: c.end,
-            text: c.text
+            seconds: Math.floor(w.start),
+            start: w.start,
+            end: w.end,
+            text: w.text
           };
         });
 
@@ -112,7 +121,7 @@ export default function UnifiedPipelinePage() {
     }
 
     if (searchType === 'regex') {
-      // Regex Search: filter local chunks directly
+      // Regex Search: filter local windows directly
       let regex: RegExp;
       try {
         regex = new RegExp(searchQuery, 'gi');
@@ -121,17 +130,18 @@ export default function UnifiedPipelinePage() {
         // Falling back to simple includes
         const q = searchQuery.toLowerCase();
         return loadedVideos.map(v => {
-          const filteredCaptions = (v.chunks || []).filter((c: any) => c.text.toLowerCase().includes(q)).map((c: any, index: number) => {
-            const minutes = Math.floor(c.start / 60);
-            const seconds = Math.floor(c.start % 60);
+          const allWindows = (v.chunks || []).flatMap((c: any) => c.windows || []);
+          const filteredCaptions = allWindows.filter((w: any) => w.text.toLowerCase().includes(q)).map((w: any, index: number) => {
+            const minutes = Math.floor(w.start / 60);
+            const seconds = Math.floor(w.start % 60);
             const timecode = `${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
             return {
-              id: `chunk_${index}`,
+              id: `window_${index}`,
               timecode: timecode,
-              seconds: Math.floor(c.start),
-              start: c.start,
-              end: c.end,
-              text: c.text
+              seconds: Math.floor(w.start),
+              start: w.start,
+              end: w.end,
+              text: w.text
             };
           });
           return {
@@ -144,17 +154,18 @@ export default function UnifiedPipelinePage() {
       }
 
       return loadedVideos.map(v => {
-        const filteredCaptions = (v.chunks || []).filter((c: any) => regex.test(c.text)).map((c: any, index: number) => {
-          const minutes = Math.floor(c.start / 60);
-          const seconds = Math.floor(c.start % 60);
+        const allWindows = (v.chunks || []).flatMap((c: any) => c.windows || []);
+        const filteredCaptions = allWindows.filter((w: any) => regex.test(w.text)).map((w: any, index: number) => {
+          const minutes = Math.floor(w.start / 60);
+          const seconds = Math.floor(w.start % 60);
           const timecode = `${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
           return {
-            id: `chunk_${index}`,
+            id: `window_${index}`,
             timecode: timecode,
-            seconds: Math.floor(c.start),
-            start: c.start,
-            end: c.end,
-            text: c.text
+            seconds: Math.floor(w.start),
+            start: w.start,
+            end: w.end,
+            text: w.text
           };
         });
         return {
@@ -310,7 +321,15 @@ export default function UnifiedPipelinePage() {
               </div>
 
               {/* Advanced Filter Bar */}
-              <div className="flex flex-1 flex-col sm:flex-row bg-background border-2 border-border focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/10 transition-all overflow-hidden rounded-xl shadow-sm w-full">
+              <form 
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (searchType === 'intelligent') {
+                    handleIntelligentSearch();
+                  }
+                }}
+                className="flex flex-1 flex-col sm:flex-row bg-background border-2 border-border focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/10 transition-all overflow-hidden rounded-xl shadow-sm w-full"
+              >
                 
                 <div className="relative flex-1 flex items-center">
                   <Search className="absolute left-3 w-4 h-4 text-muted-foreground" />
@@ -319,8 +338,21 @@ export default function UnifiedPipelinePage() {
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="Filter loaded transcripts by keyword or regex..."
-                    className="w-full bg-transparent border-0 outline-none font-medium placeholder:text-muted-foreground/60 pl-9 pr-4 py-2.5 text-sm"
+                    className="w-full bg-transparent border-0 outline-none font-medium placeholder:text-muted-foreground/60 pl-9 pr-12 py-2.5 text-sm"
                   />
+                  {searchType === 'intelligent' && (
+                    <button 
+                      type="submit" 
+                      disabled={isSearching}
+                      className="absolute right-2 p-1.5 bg-primary/10 hover:bg-primary/20 text-primary rounded-md transition-colors disabled:opacity-50"
+                    >
+                      {isSearching ? (
+                        <div className="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+                      ) : (
+                        <ArrowRight className="w-4 h-4" />
+                      )}
+                    </button>
+                  )}
                 </div>
                 
                 <div className="flex border-t-2 sm:border-t-0 sm:border-l-2 border-border bg-muted/30 shrink-0 p-1">
@@ -341,7 +373,7 @@ export default function UnifiedPipelinePage() {
                     <span>Regex</span>
                   </button>
                 </div>
-              </div>
+              </form>
 
             </div>
           )}
