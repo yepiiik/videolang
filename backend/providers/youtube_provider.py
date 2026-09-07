@@ -12,7 +12,7 @@ class YouTubeProvider(ABC):
         pass
 
     @abstractmethod
-    def get_channel_info(self, url_info: dict) -> Optional[dict]:
+    async def get_channel_info(self, url_info: dict) -> Optional[dict]:
         """
         Retrieves channel metadata.
         Returns a dict matching models.ChannelInfo shape or None if not found.
@@ -20,7 +20,7 @@ class YouTubeProvider(ABC):
         pass
 
     @abstractmethod
-    def get_channel_videos(self, url_info: dict) -> Optional[list[dict]]:
+    async def get_channel_videos(self, url_info: dict) -> Optional[list[dict]]:
         """
         Retrieves the recent videos for a channel.
         Returns a list of dicts matching models.VideoInfo shape or None if channel not found.

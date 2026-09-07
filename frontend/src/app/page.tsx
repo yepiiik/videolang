@@ -70,8 +70,8 @@ export default function UnifiedPipelinePage() {
             const res = await fetch(`/api/youtube/index/video`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ 
-                video_id: v.video_id || v.id, 
+              body: JSON.stringify({
+                video_id: v.video_id || v.id,
                 title: v.title,
                 description: v.description,
                 published_at: v.published_at,
@@ -114,16 +114,20 @@ export default function UnifiedPipelinePage() {
     setSelectedIds(new Set());
     setLoadedVideos([]);
     setSearchResults([]);
+    setLastIntelligentQuery("");
   };
 
   const [isSearching, setIsSearching] = useState(false);
+  const [lastIntelligentQuery, setLastIntelligentQuery] = useState("");
 
   const handleIntelligentSearch = async () => {
     if (!searchQuery.trim() || searchType !== 'intelligent') {
       setSearchResults([]);
+      setLastIntelligentQuery("");
       return;
     }
     setIsSearching(true);
+    setLastIntelligentQuery(searchQuery.trim());
     try {
       const res = await fetch(`/api/youtube/search?query=${encodeURIComponent(searchQuery)}`);
       const data = await res.json();
@@ -143,6 +147,7 @@ export default function UnifiedPipelinePage() {
   useEffect(() => {
     if (searchType === 'intelligent' && !searchQuery.trim()) {
       setSearchResults([]);
+      setLastIntelligentQuery("");
     }
   }, [searchType, searchQuery]);
 
@@ -150,9 +155,12 @@ export default function UnifiedPipelinePage() {
     if (!hasLoaded) return [];
 
     let results = [];
+    
+    const isRegexActive = searchType === 'regex' && !!searchQuery.trim();
+    const isIntelligentActive = searchType === 'intelligent' && !!lastIntelligentQuery;
 
-    // If query is empty, show all videos with all windows
-    if (!searchQuery.trim()) {
+    // If no active search submitted, show all videos with all windows
+    if (!isRegexActive && !isIntelligentActive) {
       results = loadedVideos.map(v => {
         const allWindows = (v.chunks || []).flatMap((c: any) => c.windows || []);
         const initialCaptions = allWindows.map((w: any, index: number) => {
@@ -209,30 +217,30 @@ export default function UnifiedPipelinePage() {
           };
         }).filter(v => v.captions.length > 0);
       }
-      
+
       if (regex) {
         results = loadedVideos.map(v => {
-        const allWindows = (v.chunks || []).flatMap((c: any) => c.windows || []);
-        const filteredCaptions = allWindows.filter((w: any) => regex.test(w.text)).map((w: any, index: number) => {
-          const minutes = Math.floor(w.start / 60);
-          const seconds = Math.floor(w.start % 60);
-          const timecode = `${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
+          const allWindows = (v.chunks || []).flatMap((c: any) => c.windows || []);
+          const filteredCaptions = allWindows.filter((w: any) => regex.test(w.text)).map((w: any, index: number) => {
+            const minutes = Math.floor(w.start / 60);
+            const seconds = Math.floor(w.start % 60);
+            const timecode = `${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
+            return {
+              id: `window_${index}`,
+              timecode: timecode,
+              seconds: Math.floor(w.start),
+              start: w.start,
+              end: w.end,
+              text: w.text
+            };
+          });
           return {
-            id: `window_${index}`,
-            timecode: timecode,
-            seconds: Math.floor(w.start),
-            start: w.start,
-            end: w.end,
-            text: w.text
+            ...v,
+            id: v.video_id,
+            thumbnailUrl: `https://img.youtube.com/vi/${v.video_id}/hqdefault.jpg`,
+            captions: filteredCaptions
           };
-        });
-        return {
-          ...v,
-          id: v.video_id,
-          thumbnailUrl: `https://img.youtube.com/vi/${v.video_id}/hqdefault.jpg`,
-          captions: filteredCaptions
-        };
-      }).filter(v => v.captions.length > 0);
+        }).filter(v => v.captions.length > 0);
       }
     } else {
       // Intelligent Search: use results from backend embedding search
@@ -333,6 +341,26 @@ export default function UnifiedPipelinePage() {
     if (percent > 40) return "bg-green-500/15 text-green-600 dark:text-green-400";
     if (percent > 20) return "bg-orange-500/15 text-orange-600 dark:text-orange-400";
     return "bg-red-500/15 text-red-600 dark:text-red-400";
+  };
+
+  const highlightText = (text: string, query: string, type: SearchType) => {
+    if (!query) return text;
+    try {
+      const pattern = type === 'regex' ? query : query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const regex = new RegExp(`(${pattern})`, 'gi');
+      const parts = text.split(regex);
+      return (
+        <span>
+          {parts.map((part, i) =>
+            i % 2 !== 0 ? (
+              <mark key={i} className="bg-primary/20 text-foreground font-semibold rounded-sm">{part}</mark>
+            ) : part
+          )}
+        </span>
+      );
+    } catch (e) {
+      return text; // Fallback to raw text if regex fails
+    }
   };
 
   return (
@@ -506,7 +534,7 @@ export default function UnifiedPipelinePage() {
             {/* Video Grid / List */}
             {filteredResults.length > 0 || isLoading ? (
               viewMode === "grid" ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
                   {filteredResults.map((video) => (
                     <div key={video.id} className={`flex flex-col bg-card border rounded-2xl overflow-hidden hover:shadow-lg transition-all group relative ${selectedIds.has(video.id) ? 'border-primary ring-2 ring-primary/20' : 'hover:border-primary/40'}`}>
 
@@ -524,9 +552,7 @@ export default function UnifiedPipelinePage() {
                       >
                         <img src={video.thumbnailUrl} alt={video.title} className="object-cover w-full h-full" />
                         <div className="absolute inset-0 bg-black/5 group-hover:bg-transparent transition-colors" />
-                        <div className="absolute bottom-2 right-2 bg-black/80 text-white text-[11px] px-2 py-0.5 rounded-md font-medium tracking-wide">
-                          12:45
-                        </div>
+
                       </div>
 
                       <div className="p-4 flex flex-col flex-1 min-h-0">
@@ -534,7 +560,7 @@ export default function UnifiedPipelinePage() {
                           {video.title}
                         </h3>
                         <p className="text-[12px] text-muted-foreground font-medium mb-4">
-                          {video.channelName} • {video.views}
+                          {video.channelName}
                         </p>
 
                         {/* Scrollable Transcriptions with Timecodes */}
@@ -554,18 +580,7 @@ export default function UnifiedPipelinePage() {
                                 )}
                               </a>
                               <p className="text-muted-foreground leading-relaxed">
-                                {/* Highlight matching text if search query exists */}
-                                {searchQuery ? (
-                                  <span>
-                                    {cap.text.split(new RegExp(`(${searchQuery})`, 'gi')).map((part, i) =>
-                                      part.toLowerCase() === searchQuery.toLowerCase() ? (
-                                        <mark key={i} className="bg-primary/20 text-foreground font-semibold rounded-sm">{part}</mark>
-                                      ) : part
-                                    )}
-                                  </span>
-                                ) : (
-                                  cap.text
-                                )}
+                                {highlightText(cap.text, searchQuery, searchType)}
                               </p>
                             </div>
                           ))}
@@ -658,17 +673,7 @@ export default function UnifiedPipelinePage() {
                                 )}
                               </a>
                               <p className="text-muted-foreground leading-relaxed text-[14px]">
-                                {searchQuery ? (
-                                  <span>
-                                    {cap.text.split(new RegExp(`(${searchQuery})`, 'gi')).map((part, i) =>
-                                      part.toLowerCase() === searchQuery.toLowerCase() ? (
-                                        <mark key={i} className="bg-primary/20 text-foreground font-semibold rounded-sm px-1">{part}</mark>
-                                      ) : part
-                                    )}
-                                  </span>
-                                ) : (
-                                  cap.text
-                                )}
+                                {highlightText(cap.text, searchQuery, searchType)}
                               </p>
                             </div>
                           ))}

@@ -123,7 +123,9 @@ def add_window_embeddings(
     return embedded_windows
 
 
-def index_single_video(video_id: str, title: str):
+async def index_single_video(video_data: dict):
+    video_id = video_data.get("video_id")
+    title = video_data.get("title", "")
     if video_already_indexed(video_id):
         print(f"Skipping {video_id}: already indexed")
         existing_video = get_video(video_id)
@@ -162,7 +164,7 @@ def index_single_video(video_id: str, title: str):
         else:
             return {"status": "failed", "reason": "Already indexed but not found in DB"}
 
-    transcript = get_video_transcript(video_id)
+    transcript = await get_video_transcript(video_id)
 
     if "error" in transcript:
         print(f"Skipping {video_id}: {transcript['error']}")
@@ -189,11 +191,6 @@ def index_single_video(video_id: str, title: str):
             "windows": embedded_windows
         })
 
-    video_data = {
-        "video_id": video_id,
-        "title": title
-    }
-    
     save_video(video_data, transcript, embedded_chunks)
     
     frontend_chunks = []
@@ -220,8 +217,8 @@ def index_single_video(video_id: str, title: str):
 
     return {"status": "indexed", "video": frontend_video}
 
-def index_channel(url_info: dict):
-    videos = get_channel_videos(url_info)
+async def index_channel(url_info: dict):
+    videos = await get_channel_videos(url_info)
 
     if not videos:
         return {
@@ -237,7 +234,7 @@ def index_channel(url_info: dict):
     frontend_videos = []
 
     for video in videos:
-        result = index_single_video(video["video_id"], video["title"])
+        result = await index_single_video(video)
         
         if result["status"] == "skipped":
             skipped.append({"video_id": video["video_id"], "title": video["title"]})

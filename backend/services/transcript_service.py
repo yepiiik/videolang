@@ -1,8 +1,9 @@
+import asyncio
 from youtube_transcript_api import YouTubeTranscriptApi
 from youtube_transcript_api._errors import YouTubeTranscriptApiException
 
 
-def get_video_transcript(video_id: str):
+def _get_video_transcript_sync(video_id: str):
     try:
         transcript_list = YouTubeTranscriptApi().list(video_id)
         
@@ -35,3 +36,6 @@ def get_video_transcript(video_id: str):
         return {
             "error": str(e)
         }
+
+async def get_video_transcript(video_id: str):
+    return await asyncio.to_thread(_get_video_transcript_sync, video_id)

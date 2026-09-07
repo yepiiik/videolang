@@ -1,6 +1,7 @@
 import re
 import json
 import requests
+import asyncio
 from typing import Optional
 import scrapetube
 
@@ -8,7 +9,7 @@ from providers.youtube_provider import YouTubeProvider
 
 
 class ScrapetubeProvider(YouTubeProvider):
-    def _fetch_yt_initial_data(self, url: str) -> Optional[dict]:
+    def _fetch_yt_initial_data_sync(self, url: str) -> Optional[dict]:
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36"
         }
@@ -25,12 +26,15 @@ class ScrapetubeProvider(YouTubeProvider):
             pass
         return None
 
-    def get_channel_id(self, url_info: dict) -> Optional[str]:
+    async def _fetch_yt_initial_data(self, url: str) -> Optional[dict]:
+        return await asyncio.to_thread(self._fetch_yt_initial_data_sync, url)
+
+    async def get_channel_id(self, url_info: dict) -> Optional[str]:
         if url_info["type"] == "channel":
             return url_info["id"]
 
         url = f"https://www.youtube.com/{url_info['id']}" if url_info["type"] == "channel_handle" else f"https://www.youtube.com/channel/{url_info['id']}"
-        data = self._fetch_yt_initial_data(url)
+        data = await self._fetch_yt_initial_data(url)
         
         if data:
             try:
@@ -41,9 +45,9 @@ class ScrapetubeProvider(YouTubeProvider):
                 
         return None
 
-    def get_channel_info(self, url_info: dict) -> Optional[dict]:
+    async def get_channel_info(self, url_info: dict) -> Optional[dict]:
         url = f"https://www.youtube.com/{url_info['id']}" if url_info["type"] == "channel_handle" else f"https://www.youtube.com/channel/{url_info['id']}"
-        data = self._fetch_yt_initial_data(url)
+        data = await self._fetch_yt_initial_data(url)
         
         if not data:
             return None
@@ -74,9 +78,7 @@ class ScrapetubeProvider(YouTubeProvider):
         except KeyError:
             return None
 
-    def get_channel_videos(self, url_info: dict) -> Optional[list[dict]]:
-        channel_url = f"https://www.youtube.com/{url_info['id']}" if url_info["type"] == "channel_handle" else f"https://www.youtube.com/channel/{url_info['id']}"
-            
+    def _fetch_channel_videos_sync(self, channel_url: str) -> Optional[list[dict]]:
         videos = []
         try:
             # Get latest 50 videos using scrapetube
@@ -106,3 +108,8 @@ class ScrapetubeProvider(YouTubeProvider):
             return None
             
         return videos
+
+    async def get_channel_videos(self, url_info: dict) -> Optional[list[dict]]:
+        channel_url = f"https://www.youtube.com/{url_info['id']}" if url_info["type"] == "channel_handle" else f"https://www.youtube.com/channel/{url_info['id']}"
+            
+        return await asyncio.to_thread(self._fetch_channel_videos_sync, channel_url)

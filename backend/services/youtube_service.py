@@ -10,26 +10,26 @@ def get_default_provider() -> YouTubeProvider:
         return ScrapetubeProvider()
     return YouTubeApiProvider()
 
-def get_channel_info(url_info: dict, provider: Optional[YouTubeProvider] = None):
+async def get_channel_info(url_info: dict, provider: Optional[YouTubeProvider] = None):
     active_provider = provider if provider is not None else get_default_provider()
         
-    result = active_provider.get_channel_info(url_info)
+    result = await active_provider.get_channel_info(url_info)
     
     # Fallback to API if scrapetube is blocked (e.g., consent wall)
     if result is None and not isinstance(active_provider, YouTubeApiProvider):
         print("Warning: Default provider failed to fetch channel info. Falling back to YouTube API.")
-        result = YouTubeApiProvider().get_channel_info(url_info)
+        result = await YouTubeApiProvider().get_channel_info(url_info)
         
     return result
 
-def get_channel_videos(url_info: dict, provider: Optional[YouTubeProvider] = None):
+async def get_channel_videos(url_info: dict, provider: Optional[YouTubeProvider] = None):
     active_provider = provider if provider is not None else get_default_provider()
         
-    result = active_provider.get_channel_videos(url_info)
+    result = await active_provider.get_channel_videos(url_info)
     
     # Fallback to API if scrapetube is blocked (e.g., consent wall)
     if result is None and not isinstance(active_provider, YouTubeApiProvider):
         print("Warning: Default provider failed to fetch videos. Falling back to YouTube API.")
-        result = YouTubeApiProvider().get_channel_videos(url_info)
+        result = await YouTubeApiProvider().get_channel_videos(url_info)
         
     return result

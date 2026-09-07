@@ -28,7 +28,7 @@ router = APIRouter(
 
 
 @router.get("/channel")
-def get_channel(query: str):
+async def get_channel(query: str):
     parsed_url = parse_youtube_url(query)
 
     if parsed_url is None:
@@ -46,7 +46,7 @@ def get_channel(query: str):
             detail="URL must point to a YouTube channel"
         )
 
-    result = get_channel_info(parsed_url)
+    result = await get_channel_info(parsed_url)
 
     if result is None:
         raise HTTPException(
@@ -58,7 +58,7 @@ def get_channel(query: str):
 
 
 @router.get("/channel/videos")
-def get_videos(query: str):
+async def get_videos(query: str):
     parsed_url = parse_youtube_url(query)
 
     if parsed_url is None:
@@ -76,7 +76,7 @@ def get_videos(query: str):
             detail="URL must point to a YouTube channel"
         )
 
-    result = get_channel_videos(parsed_url)
+    result = await get_channel_videos(parsed_url)
 
     if result is None:
         raise HTTPException(
@@ -88,12 +88,12 @@ def get_videos(query: str):
 
 
 @router.get("/video/transcript")
-def transcript(video_id: str):
-    return get_video_transcript(video_id)
+async def transcript(video_id: str):
+    return await get_video_transcript(video_id)
 
 
 @router.post("/index/channel")
-def index(query: str):
+async def index(query: str):
     parsed_url = parse_youtube_url(query)
 
     if parsed_url is None:
@@ -111,17 +111,20 @@ def index(query: str):
             detail="URL must point to a YouTube channel"
         )
 
-    return index_channel(parsed_url)
+    return await index_channel(parsed_url)
 
 
 from pydantic import BaseModel
 class IndexVideoRequest(BaseModel):
     video_id: str
     title: str
+    description: str = ""
+    published_at: str = ""
+    thumbnail: str = ""
 
 @router.post("/index/video")
-def index_video(request: IndexVideoRequest):
-    return index_single_video(request.video_id, request.title)
+async def index_video(request: IndexVideoRequest):
+    return await index_single_video(request.model_dump())
 
 
 @router.get("/database/test")
