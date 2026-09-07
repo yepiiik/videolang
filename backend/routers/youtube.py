@@ -12,7 +12,7 @@ from services.transcript_service import (
     get_video_transcript,
 )
 
-from services.index_service import index_channel
+from services.index_service import index_channel, index_single_video
 
 from services.search_service import semantic_search
 
@@ -112,6 +112,16 @@ def index(query: str):
         )
 
     return index_channel(parsed_url)
+
+
+from pydantic import BaseModel
+class IndexVideoRequest(BaseModel):
+    video_id: str
+    title: str
+
+@router.post("/index/video")
+def index_video(request: IndexVideoRequest):
+    return index_single_video(request.video_id, request.title)
 
 
 @router.get("/database/test")

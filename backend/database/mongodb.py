@@ -47,9 +47,9 @@ def save_video(video: dict, transcript: dict, chunks: list):
     document = {
         "video_id": video["video_id"],
         "title": video["title"],
-        "description": video["description"],
-        "published_at": video["published_at"],
-        "thumbnail": video["thumbnail"],
+        "description": video.get("description", ""),
+        "published_at": video.get("published_at", ""),
+        "thumbnail": video.get("thumbnail", ""),
         "language": transcript.get("language"),
         "transcript": transcript.get("transcript", []),
         "chunks": chunks

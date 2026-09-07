@@ -10,17 +10,18 @@ type SearchType = "intelligent" | "regex";
 export default function UnifiedPipelinePage() {
   const [sourceType, setSourceType] = useState("channel");
   const [sourceUrl, setSourceUrl] = useState("");
-  
+
   const [hasLoaded, setHasLoaded] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  
+
   const [searchQuery, setSearchQuery] = useState("");
   const [searchType, setSearchType] = useState<SearchType>("intelligent");
-  
+
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [expandedVideos, setExpandedVideos] = useState<Record<string, boolean>>({});
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [isProcessing, setIsProcessing] = useState(false);
+  const [includeShorts, setIncludeShorts] = useState(false);
 
   const [loadedVideos, setLoadedVideos] = useState<Video[]>([]);
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
@@ -31,17 +32,73 @@ export default function UnifiedPipelinePage() {
       alert("Please enter a valid YouTube channel, playlist, or video URL.");
       return;
     }
-    
+
     setIsLoading(true);
+    setLoadedVideos([]);
     try {
-      const res = await fetch(`/api/youtube/index?query=${encodeURIComponent(sourceUrl)}`, { method: "POST" });
-      const data = await res.json();
-      if (data.videos) {
-        setLoadedVideos(data.videos);
-        setHasLoaded(true);
-      } else {
-        alert("Failed to load: " + (data.error || "Unknown error"));
+      // 1. Fetch channel videos list
+      const videosRes = await fetch(`/api/youtube/channel/videos?query=${encodeURIComponent(sourceUrl)}`);
+      const videosData = await videosRes.json();
+
+      if (videosData.error) {
+        alert("Failed to load videos: " + videosData.error);
+        setIsLoading(false);
+        return;
       }
+
+      const allVideos = Array.isArray(videosData) ? videosData : (videosData.videos || []);
+      if (allVideos.length === 0) {
+        alert("No videos found in channel.");
+        setIsLoading(false);
+        return;
+      }
+
+      setHasLoaded(true); // Show grid immediately
+
+      // 2. Process videos in blocks
+      const BATCH_SIZE = 3;
+      const MAX_VIDEOS = 15; // Limit to 15 to avoid massive usage during testing
+
+      const videosToProcess = allVideos.slice(0, Math.min(allVideos.length, MAX_VIDEOS));
+
+      for (let i = 0; i < videosToProcess.length; i += BATCH_SIZE) {
+        const batch = videosToProcess.slice(i, i + BATCH_SIZE);
+
+        // Process batch concurrently
+        const promises = batch.map(async (v: any) => {
+          try {
+            const res = await fetch(`/api/youtube/index/video`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ 
+                video_id: v.video_id || v.id, 
+                title: v.title,
+                description: v.description,
+                published_at: v.published_at,
+                thumbnail: v.thumbnail || v.thumbnailUrl
+              })
+            });
+            const data = await res.json();
+            if (data.status === "indexed" || data.status === "skipped") {
+              setLoadedVideos(prev => {
+                // Ensure no duplicates
+                if (prev.some(pv => pv.video_id === data.video.video_id)) return prev;
+                return [...prev, data.video];
+              });
+            }
+          } catch (e) {
+            console.error(`Failed to index ${v.title}`, e);
+          }
+        });
+
+        await Promise.all(promises);
+
+        // Add delay between batches
+        if (i + BATCH_SIZE < videosToProcess.length) {
+          await new Promise(r => setTimeout(r, 2000));
+        }
+      }
+
     } catch (err) {
       console.error(err);
       alert("Error loading source");
@@ -71,9 +128,9 @@ export default function UnifiedPipelinePage() {
       const res = await fetch(`/api/youtube/search?query=${encodeURIComponent(searchQuery)}`);
       const data = await res.json();
       if (Array.isArray(data)) {
-         // filter data to only include videos from loadedVideos
-         const loadedIds = new Set(loadedVideos.map(v => v.video_id));
-         setSearchResults(data.filter(r => loadedIds.has(r.video_id)));
+        // filter data to only include videos from loadedVideos
+        const loadedIds = new Set(loadedVideos.map(v => v.video_id));
+        setSearchResults(data.filter(r => loadedIds.has(r.video_id)));
       }
     } catch (err) {
       console.error(err);
@@ -91,16 +148,18 @@ export default function UnifiedPipelinePage() {
 
   const filteredResults = useMemo(() => {
     if (!hasLoaded) return [];
-    
+
+    let results = [];
+
     // If query is empty, show all videos with all windows
     if (!searchQuery.trim()) {
-      return loadedVideos.map(v => {
+      results = loadedVideos.map(v => {
         const allWindows = (v.chunks || []).flatMap((c: any) => c.windows || []);
         const initialCaptions = allWindows.map((w: any, index: number) => {
           const minutes = Math.floor(w.start / 60);
           const seconds = Math.floor(w.start % 60);
           const timecode = `${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
-          
+
           return {
             id: `window_${index}`,
             timecode: timecode,
@@ -118,18 +177,16 @@ export default function UnifiedPipelinePage() {
           captions: initialCaptions
         };
       });
-    }
-
-    if (searchType === 'regex') {
+    } else if (searchType === 'regex') {
       // Regex Search: filter local windows directly
-      let regex: RegExp;
+      let regex: RegExp | null = null;
       try {
         regex = new RegExp(searchQuery, 'gi');
       } catch (e) {
         // Invalid regex, return empty or treat as normal string
         // Falling back to simple includes
         const q = searchQuery.toLowerCase();
-        return loadedVideos.map(v => {
+        results = loadedVideos.map(v => {
           const allWindows = (v.chunks || []).flatMap((c: any) => c.windows || []);
           const filteredCaptions = allWindows.filter((w: any) => w.text.toLowerCase().includes(q)).map((w: any, index: number) => {
             const minutes = Math.floor(w.start / 60);
@@ -152,8 +209,9 @@ export default function UnifiedPipelinePage() {
           };
         }).filter(v => v.captions.length > 0);
       }
-
-      return loadedVideos.map(v => {
+      
+      if (regex) {
+        results = loadedVideos.map(v => {
         const allWindows = (v.chunks || []).flatMap((c: any) => c.windows || []);
         const filteredCaptions = allWindows.filter((w: any) => regex.test(w.text)).map((w: any, index: number) => {
           const minutes = Math.floor(w.start / 60);
@@ -175,41 +233,64 @@ export default function UnifiedPipelinePage() {
           captions: filteredCaptions
         };
       }).filter(v => v.captions.length > 0);
-    }
+      }
+    } else {
+      // Intelligent Search: use results from backend embedding search
+      const videoMap = new Map();
 
-    // Intelligent Search: use results from backend embedding search
-    const videoMap = new Map();
-    
-    for (const r of searchResults) {
-      if (!videoMap.has(r.video_id)) {
-        const videoInfo = loadedVideos.find(v => v.video_id === r.video_id);
-        if (videoInfo) {
-          videoMap.set(r.video_id, {
-            ...videoInfo,
-            id: r.video_id,
-            thumbnailUrl: `https://img.youtube.com/vi/${r.video_id}/hqdefault.jpg`,
-            captions: []
+      for (const r of searchResults) {
+        if (!videoMap.has(r.video_id)) {
+          const videoInfo = loadedVideos.find(v => v.video_id === r.video_id);
+          if (videoInfo) {
+            videoMap.set(r.video_id, {
+              ...videoInfo,
+              id: r.video_id,
+              thumbnailUrl: `https://img.youtube.com/vi/${r.video_id}/hqdefault.jpg`,
+              captions: []
+            });
+          }
+        }
+
+        const vid = videoMap.get(r.video_id);
+        if (vid) {
+          const minutes = Math.floor(r.start / 60);
+          const seconds = Math.floor(r.start % 60);
+          const timecode = `${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
+
+          vid.captions.push({
+            id: Math.random().toString(36).substring(7),
+            timecode: timecode,
+            seconds: Math.floor(r.start),
+            text: r.text,
+            end: r.end,
+            score: r.timestamp_score
           });
         }
       }
-      
-      const vid = videoMap.get(r.video_id);
-      if (vid) {
-        const minutes = Math.floor(r.start / 60);
-        const seconds = Math.floor(r.start % 60);
-        const timecode = `${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
-        
-        vid.captions.push({
-          id: Math.random().toString(36).substring(7),
-          timecode: timecode,
-          seconds: Math.floor(r.start),
-          text: r.text
-        });
-      }
+
+      results = Array.from(videoMap.values()).filter(v => v.captions.length > 0);
     }
-    
-    return Array.from(videoMap.values());
-  }, [hasLoaded, searchQuery, loadedVideos, searchResults, searchType]);
+
+    // Filter out shorts if toggle is disabled
+    if (!includeShorts) {
+      results = results.filter(v => {
+        // Check for #short or #shorts in title
+        if (v.title.toLowerCase().includes('#short')) return false;
+
+        // Check video duration based on the last chunk
+        if (v.chunks && v.chunks.length > 0) {
+          const lastChunk = v.chunks[v.chunks.length - 1];
+          if (lastChunk.end <= 120) return false;
+        } else if (v.captions && v.captions.length > 0) {
+          const lastCaption = v.captions[v.captions.length - 1];
+          if (lastCaption.end <= 120) return false;
+        }
+        return true;
+      });
+    }
+
+    return results;
+  }, [hasLoaded, loadedVideos, searchQuery, searchType, searchResults, includeShorts]);
 
   const toggleAll = () => {
     if (selectedIds.size === filteredResults.length) {
@@ -247,16 +328,23 @@ export default function UnifiedPipelinePage() {
     }, 1500);
   };
 
+  const getBadgeClass = (score: number) => {
+    const percent = Math.round(score * 100);
+    if (percent > 40) return "bg-green-500/15 text-green-600 dark:text-green-400";
+    if (percent > 20) return "bg-orange-500/15 text-orange-600 dark:text-orange-400";
+    return "bg-red-500/15 text-red-600 dark:text-red-400";
+  };
+
   return (
     <div className="flex flex-col min-h-[calc(100vh-4rem)] bg-background text-foreground selection:bg-primary/20">
-      
+
       {/* Dynamic Form Container */}
-      <div 
+      <div
         className={`w-full flex flex-col items-center transition-all duration-700 ease-[cubic-bezier(0.2,0.8,0.2,1)] px-4 sm:px-6 z-40
         ${hasLoaded ? 'py-4 sticky top-[64px] bg-background/95 backdrop-blur-md border-b shadow-sm' : 'pt-[25vh] pb-16'}`}
       >
         <div className={`w-full transition-all duration-700 ${hasLoaded ? 'max-w-7xl flex flex-col xl:flex-row items-center gap-4' : 'max-w-3xl flex flex-col gap-6'}`}>
-          
+
           {/* Initial Load Form */}
           {!hasLoaded ? (
             <form onSubmit={handleLoad} className="w-full flex flex-col gap-6">
@@ -267,7 +355,7 @@ export default function UnifiedPipelinePage() {
 
               <div className="flex bg-background border-2 border-border focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/10 transition-all overflow-hidden rounded-2xl shadow-sm">
                 <div className="relative border-r-2 border-border bg-muted/30 shrink-0">
-                  <select 
+                  <select
                     value={sourceType}
                     onChange={(e) => setSourceType(e.target.value)}
                     className="appearance-none bg-transparent font-semibold text-foreground focus:outline-none cursor-pointer py-4 pl-5 pr-10 text-lg"
@@ -278,7 +366,7 @@ export default function UnifiedPipelinePage() {
                   </select>
                   <ChevronDown className="absolute right-4 top-4.5 w-5 h-5 opacity-50 pointer-events-none" />
                 </div>
-                <input 
+                <input
                   type="text"
                   value={sourceUrl}
                   onChange={(e) => setSourceUrl(e.target.value)}
@@ -287,7 +375,7 @@ export default function UnifiedPipelinePage() {
                 />
               </div>
 
-              <button 
+              <button
                 type="submit"
                 disabled={isLoading}
                 className="w-full flex items-center justify-center font-bold text-primary-foreground bg-primary hover:bg-primary/90 transition-all shadow-md py-4 rounded-2xl text-lg disabled:opacity-50"
@@ -308,7 +396,7 @@ export default function UnifiedPipelinePage() {
           ) : (
             /* Compact Header when Loaded */
             <div className="w-full flex flex-col lg:flex-row items-center gap-4 animate-in fade-in slide-in-from-top-2">
-              
+
               {/* Loaded Source Badge */}
               <div className="flex items-center bg-muted/50 rounded-xl p-1.5 shrink-0 w-full lg:w-auto">
                 <div className="flex items-center px-3 py-1.5 bg-background shadow-sm rounded-lg border">
@@ -321,7 +409,7 @@ export default function UnifiedPipelinePage() {
               </div>
 
               {/* Advanced Filter Bar */}
-              <form 
+              <form
                 onSubmit={(e) => {
                   e.preventDefault();
                   if (searchType === 'intelligent') {
@@ -330,10 +418,10 @@ export default function UnifiedPipelinePage() {
                 }}
                 className="flex flex-1 flex-col sm:flex-row bg-background border-2 border-border focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/10 transition-all overflow-hidden rounded-xl shadow-sm w-full"
               >
-                
+
                 <div className="relative flex-1 flex items-center">
                   <Search className="absolute left-3 w-4 h-4 text-muted-foreground" />
-                  <input 
+                  <input
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
@@ -341,8 +429,8 @@ export default function UnifiedPipelinePage() {
                     className="w-full bg-transparent border-0 outline-none font-medium placeholder:text-muted-foreground/60 pl-9 pr-12 py-2.5 text-sm"
                   />
                   {searchType === 'intelligent' && (
-                    <button 
-                      type="submit" 
+                    <button
+                      type="submit"
                       disabled={isSearching}
                       className="absolute right-2 p-1.5 bg-primary/10 hover:bg-primary/20 text-primary rounded-md transition-colors disabled:opacity-50"
                     >
@@ -354,9 +442,9 @@ export default function UnifiedPipelinePage() {
                     </button>
                   )}
                 </div>
-                
+
                 <div className="flex border-t-2 sm:border-t-0 sm:border-l-2 border-border bg-muted/30 shrink-0 p-1">
-                  <button 
+                  <button
                     type="button"
                     onClick={() => setSearchType("intelligent")}
                     className={`flex items-center justify-center space-x-1.5 transition-all px-3 py-1.5 rounded-lg text-xs font-bold ${searchType === "intelligent" ? 'bg-background text-primary shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
@@ -364,7 +452,7 @@ export default function UnifiedPipelinePage() {
                     <Sparkles className="w-3 h-3" />
                     <span>Intelligent</span>
                   </button>
-                  <button 
+                  <button
                     type="button"
                     onClick={() => setSearchType("regex")}
                     className={`flex items-center justify-center space-x-1.5 transition-all px-3 py-1.5 rounded-lg text-xs font-bold ${searchType === "regex" ? 'bg-background text-primary shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
@@ -384,7 +472,7 @@ export default function UnifiedPipelinePage() {
       {hasLoaded && (
         <div className="w-full px-4 sm:px-8 xl:px-12 py-8 flex-1 animate-in fade-in slide-in-from-top-4 duration-500">
           <div className="flex flex-col space-y-6 pb-24">
-            
+
             {/* Grid Header */}
             <div className="flex items-center justify-between border-b pb-4">
               <div className="flex items-center space-x-6">
@@ -395,7 +483,7 @@ export default function UnifiedPipelinePage() {
                 <h2 className="text-xl font-bold tracking-tight">Export Pipeline</h2>
               </div>
               <div className="flex items-center space-x-4">
-                <div className="hidden sm:flex bg-muted/50 p-1 rounded-lg">
+                <div className="flex bg-muted/50 p-1 rounded-lg">
                   <button onClick={() => setViewMode("grid")} className={`p-1.5 rounded-md transition-all ${viewMode === "grid" ? "bg-background shadow-sm text-primary" : "text-muted-foreground hover:text-foreground"}`}>
                     <LayoutGrid className="w-4 h-4" />
                   </button>
@@ -403,29 +491,35 @@ export default function UnifiedPipelinePage() {
                     <ListIcon className="w-4 h-4" />
                   </button>
                 </div>
-                <div className="text-sm font-medium text-muted-foreground bg-muted px-3 py-1 rounded-full">
+                <button
+                  onClick={() => setIncludeShorts(!includeShorts)}
+                  className={`text-sm font-medium px-3 py-1.5 rounded-full transition-colors border ${includeShorts ? "bg-primary/10 text-primary border-primary/20" : "bg-transparent text-muted-foreground border-border hover:bg-muted"}`}
+                >
+                  {includeShorts ? "Shorts Included" : "Include Shorts"}
+                </button>
+                <div className="text-sm font-medium text-muted-foreground bg-muted px-3 py-1.5 rounded-full">
                   {filteredResults.length} videos match
                 </div>
               </div>
             </div>
 
             {/* Video Grid / List */}
-            {filteredResults.length > 0 ? (
+            {filteredResults.length > 0 || isLoading ? (
               viewMode === "grid" ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-6">
                   {filteredResults.map((video) => (
-                  <div key={video.id} className={`flex flex-col bg-card border rounded-2xl overflow-hidden hover:shadow-lg transition-all group relative ${selectedIds.has(video.id) ? 'border-primary ring-2 ring-primary/20' : 'hover:border-primary/40'}`}>
-                    
-                    {/* Checkbox Overlay */}
-                    <button 
-                      onClick={() => toggleVideo(video.id)} 
-                      className="absolute top-2 left-2 z-10 bg-background/80 backdrop-blur rounded-md p-1 hover:bg-background transition-colors shadow-sm"
-                    >
-                      {selectedIds.has(video.id) ? <CheckSquare className="w-5 h-5 text-primary" /> : <Square className="w-5 h-5 text-muted-foreground" />}
-                    </button>
+                    <div key={video.id} className={`flex flex-col bg-card border rounded-2xl overflow-hidden hover:shadow-lg transition-all group relative ${selectedIds.has(video.id) ? 'border-primary ring-2 ring-primary/20' : 'hover:border-primary/40'}`}>
 
-                      <div 
-                        onClick={() => toggleVideo(video.id)} 
+                      {/* Checkbox Overlay */}
+                      <button
+                        onClick={() => toggleVideo(video.id)}
+                        className="absolute top-2 left-2 z-10 bg-background/80 backdrop-blur rounded-md p-1 hover:bg-background transition-colors shadow-sm"
+                      >
+                        {selectedIds.has(video.id) ? <CheckSquare className="w-5 h-5 text-primary" /> : <Square className="w-5 h-5 text-muted-foreground" />}
+                      </button>
+
+                      <div
+                        onClick={() => toggleVideo(video.id)}
                         className="relative aspect-video bg-muted border-b block shrink-0 cursor-pointer"
                       >
                         <img src={video.thumbnailUrl} alt={video.title} className="object-cover w-full h-full" />
@@ -434,57 +528,78 @@ export default function UnifiedPipelinePage() {
                           12:45
                         </div>
                       </div>
-                    
-                    <div className="p-4 flex flex-col flex-1 min-h-0">
-                      <h3 className="font-bold text-[15px] leading-tight line-clamp-2 group-hover:text-primary transition-colors mb-2">
-                        {video.title}
-                      </h3>
-                      <p className="text-[12px] text-muted-foreground font-medium mb-4">
-                        {video.channelName} • {video.views}
-                      </p>
-                      
-                      {/* Scrollable Transcriptions with Timecodes */}
-                      <div className="flex flex-col gap-2 mt-auto h-36 overflow-y-auto pr-2 custom-scrollbar">
-                        {video.captions.map((cap) => (
-                          <div key={cap.id} className="flex space-x-3 text-[13px] bg-muted/30 p-2 rounded-lg border border-transparent hover:border-border hover:bg-muted/50 transition-colors">
-                            <a 
-                              href={`https://youtube.com/watch?v=${video.id}&t=${cap.seconds}s`} 
-                              target="_blank" 
-                              className="flex-shrink-0 text-primary font-semibold flex items-start space-x-1 pt-0.5 hover:underline"
-                            >
-                              <span>{cap.timecode}</span>
-                            </a>
-                            <p className="text-muted-foreground leading-relaxed">
-                              {/* Highlight matching text if search query exists */}
-                              {searchQuery ? (
-                                <span>
-                                  {cap.text.split(new RegExp(`(${searchQuery})`, 'gi')).map((part, i) => 
-                                    part.toLowerCase() === searchQuery.toLowerCase() ? (
-                                      <mark key={i} className="bg-primary/20 text-foreground font-semibold rounded-sm">{part}</mark>
-                                    ) : part
-                                  )}
-                                </span>
-                              ) : (
-                                cap.text
-                              )}
-                            </p>
-                          </div>
-                        ))}
+
+                      <div className="p-4 flex flex-col flex-1 min-h-0">
+                        <h3 className="font-bold text-[15px] leading-tight line-clamp-2 group-hover:text-primary transition-colors mb-2">
+                          {video.title}
+                        </h3>
+                        <p className="text-[12px] text-muted-foreground font-medium mb-4">
+                          {video.channelName} • {video.views}
+                        </p>
+
+                        {/* Scrollable Transcriptions with Timecodes */}
+                        <div className="flex flex-col gap-2 mt-auto h-36 overflow-y-auto pr-2 custom-scrollbar">
+                          {video.captions.map((cap) => (
+                            <div key={cap.id} className="flex space-x-3 text-[13px] bg-muted/30 p-2 rounded-lg border border-transparent hover:border-border hover:bg-muted/50 transition-colors">
+                              <a
+                                href={`https://youtube.com/watch?v=${video.id}&t=${cap.seconds}s`}
+                                target="_blank"
+                                className="flex-shrink-0 text-primary font-semibold flex flex-col items-start pt-0.5 hover:underline"
+                              >
+                                <span>{cap.timecode}</span>
+                                {cap.score !== undefined && (
+                                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded mt-1 ${getBadgeClass(cap.score)}`}>
+                                    {Math.round(cap.score * 100)}% Match
+                                  </span>
+                                )}
+                              </a>
+                              <p className="text-muted-foreground leading-relaxed">
+                                {/* Highlight matching text if search query exists */}
+                                {searchQuery ? (
+                                  <span>
+                                    {cap.text.split(new RegExp(`(${searchQuery})`, 'gi')).map((part, i) =>
+                                      part.toLowerCase() === searchQuery.toLowerCase() ? (
+                                        <mark key={i} className="bg-primary/20 text-foreground font-semibold rounded-sm">{part}</mark>
+                                      ) : part
+                                    )}
+                                  </span>
+                                ) : (
+                                  cap.text
+                                )}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+
+                  {/* Grid Loading Skeletons */}
+                  {isLoading && (
+                    <>
+                      {[1, 2, 3].map((i) => (
+                        <div key={`skeleton-${i}`} className="flex flex-col bg-card border rounded-2xl overflow-hidden animate-pulse">
+                          <div className="aspect-video bg-muted/60" />
+                          <div className="p-4 flex flex-col flex-1">
+                            <div className="h-4 bg-muted rounded w-3/4 mb-2" />
+                            <div className="h-3 bg-muted rounded w-1/2 mb-4" />
+                            <div className="mt-auto h-32 bg-muted/20 rounded-lg" />
+                          </div>
+                        </div>
+                      ))}
+                    </>
+                  )}
+                </div>
               ) : (
                 <div className="flex flex-col">
                   {filteredResults.map((video) => (
                     <div key={video.id} id={`video-${video.id}`} className="grid grid-cols-1 md:grid-cols-2 py-16 border-b border-border/50 relative group scroll-mt-[100px]">
-                      
+
                       {/* Left Column: Video Info (Sticky, hugging center) */}
                       <div className="flex flex-col w-full md:pr-6 lg:pr-12">
                         <div className={`w-full max-w-sm ml-auto sticky top-[180px] flex flex-col bg-card border rounded-2xl overflow-hidden transition-all shadow-sm ${selectedIds.has(video.id) ? 'border-primary ring-2 ring-primary/20' : 'hover:border-primary/40'}`}>
-                          <div 
-                            onClick={() => toggleVideo(video.id)} 
+                          <div
+                            onClick={() => toggleVideo(video.id)}
                             className="relative aspect-video bg-muted block shrink-0 cursor-pointer"
                           >
                             <img src={video.thumbnailUrl} alt={video.title} className="object-cover w-full h-full" />
@@ -493,8 +608,8 @@ export default function UnifiedPipelinePage() {
                               12:45
                             </div>
                             {/* Checkbox Overlay */}
-                            <button 
-                              onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleVideo(video.id); }} 
+                            <button
+                              onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleVideo(video.id); }}
                               className="absolute top-2 left-2 z-10 bg-background/80 backdrop-blur rounded-md p-1.5 hover:bg-background transition-colors shadow-sm"
                             >
                               {selectedIds.has(video.id) ? <CheckSquare className="w-5 h-5 text-primary" /> : <Square className="w-5 h-5 text-muted-foreground" />}
@@ -510,16 +625,16 @@ export default function UnifiedPipelinePage() {
                           </div>
                         </div>
                       </div>
-                      
+
                       {/* Right Column: Captions (Natural scroll, hugging center) */}
                       <div className="flex flex-col w-full md:pl-6 lg:pl-12 mt-8 md:mt-0">
                         <div className="w-full max-w-2xl mr-auto flex flex-col gap-3">
-                          
+
                           {/* Sticky Show Less Banner (Only visible when expanded) */}
                           {expandedVideos[video.id] && (
                             <div className="sticky top-[80px] sm:top-[180px] z-20 bg-background/95 backdrop-blur-sm p-3 rounded-xl border shadow-sm mb-2 flex items-center justify-between">
                               <span className="text-sm font-semibold text-muted-foreground">Showing all {video.captions.length} captions</span>
-                              <button 
+                              <button
                                 onClick={() => toggleExpand(video.id)}
                                 className="px-4 py-1.5 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 font-bold text-sm transition-all"
                               >
@@ -530,17 +645,22 @@ export default function UnifiedPipelinePage() {
 
                           {(expandedVideos[video.id] ? video.captions : video.captions.slice(0, 10)).map((cap) => (
                             <div key={cap.id} className="flex space-x-4 text-[14px] bg-muted/10 p-4 rounded-xl border border-transparent hover:border-border hover:bg-muted/30 transition-colors">
-                              <a 
-                                href={`https://youtube.com/watch?v=${video.id}&t=${cap.seconds}s`} 
-                                target="_blank" 
-                                className="flex-shrink-0 text-primary font-bold flex items-start space-x-1 pt-0.5 hover:underline"
+                              <a
+                                href={`https://youtube.com/watch?v=${video.id}&t=${cap.seconds}s`}
+                                target="_blank"
+                                className="flex-shrink-0 text-primary font-bold flex flex-col items-start pt-0.5 hover:underline"
                               >
                                 <span>{cap.timecode}</span>
+                                {cap.score !== undefined && (
+                                  <span className={`text-[11px] font-bold px-2 py-0.5 rounded mt-1 ${getBadgeClass(cap.score)}`}>
+                                    {Math.round(cap.score * 100)}% Match
+                                  </span>
+                                )}
                               </a>
                               <p className="text-muted-foreground leading-relaxed text-[14px]">
                                 {searchQuery ? (
                                   <span>
-                                    {cap.text.split(new RegExp(`(${searchQuery})`, 'gi')).map((part, i) => 
+                                    {cap.text.split(new RegExp(`(${searchQuery})`, 'gi')).map((part, i) =>
                                       part.toLowerCase() === searchQuery.toLowerCase() ? (
                                         <mark key={i} className="bg-primary/20 text-foreground font-semibold rounded-sm px-1">{part}</mark>
                                       ) : part
@@ -555,7 +675,7 @@ export default function UnifiedPipelinePage() {
 
                           {/* Bottom Toggle Button */}
                           {video.captions.length > 10 && (
-                            <button 
+                            <button
                               onClick={() => toggleExpand(video.id)}
                               className="mt-2 w-full py-3 rounded-xl border-2 border-border/50 hover:border-primary/30 bg-muted/10 hover:bg-muted/30 font-bold text-sm transition-all text-muted-foreground hover:text-foreground shadow-sm"
                             >
@@ -564,9 +684,32 @@ export default function UnifiedPipelinePage() {
                           )}
                         </div>
                       </div>
-
                     </div>
                   ))}
+
+                  {/* List Loading Skeletons */}
+                  {isLoading && (
+                    <>
+                      {[1, 2].map((i) => (
+                        <div key={`list-skeleton-${i}`} className="grid grid-cols-1 md:grid-cols-2 py-16 border-b border-border/50 animate-pulse">
+                          <div className="flex flex-col w-full md:pr-6 lg:pr-12">
+                            <div className="w-full max-w-sm ml-auto bg-card border rounded-2xl overflow-hidden">
+                              <div className="aspect-video bg-muted/60" />
+                              <div className="p-5 flex flex-col gap-2">
+                                <div className="h-4 bg-muted rounded w-3/4" />
+                                <div className="h-3 bg-muted rounded w-1/2" />
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex flex-col w-full md:pl-6 lg:pl-12 mt-8 md:mt-0 gap-3">
+                            <div className="w-full max-w-2xl mr-auto h-16 bg-muted/20 rounded-xl" />
+                            <div className="w-full max-w-2xl mr-auto h-16 bg-muted/20 rounded-xl" />
+                            <div className="w-full max-w-2xl mr-auto h-16 bg-muted/20 rounded-xl" />
+                          </div>
+                        </div>
+                      ))}
+                    </>
+                  )}
                 </div>
               )
             ) : (
@@ -593,7 +736,7 @@ export default function UnifiedPipelinePage() {
                     </select>
                     <ChevronDown className="absolute right-4 top-3.5 h-4 w-4 opacity-50 pointer-events-none" />
                   </div>
-                  <button 
+                  <button
                     onClick={handleExport}
                     disabled={isProcessing}
                     className="flex-1 sm:flex-none inline-flex items-center justify-center rounded-xl font-bold text-[15px] transition-colors bg-foreground text-background hover:bg-foreground/90 py-2.5 px-8 disabled:opacity-50 shadow-md cursor-pointer"

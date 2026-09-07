@@ -5,6 +5,7 @@ export interface CaptionSnippet {
   start?: number;
   end?: number;
   text: string;
+  score?: number;
 }
 
 export interface Video {

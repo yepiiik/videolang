@@ -29,7 +29,7 @@ def cosine_similarity(
     )
 
 
-def find_best_window(
+def get_scored_windows(
     query_embedding: list[float],
     chunk: dict,
     context_before: float = 15.0,
@@ -38,68 +38,42 @@ def find_best_window(
     windows = chunk.get("windows", [])
 
     if not windows:
-        # Fallback to the main chunk for older indexed videos without windows
         chunk_embedding = chunk.get("embedding", [])
         score = 0.0
         if chunk_embedding:
             score = cosine_similarity(query_embedding, chunk_embedding)
-        return {
+        return [{
             "start": chunk.get("start", 0),
             "end": chunk.get("end", 0),
             "text": chunk.get("text", ""),
             "score": score
-        }
+        }]
 
-    best_window = None
-    best_score = -1.0
-
+    scored = []
     for window in windows:
         embedding = window.get("embedding", [])
-
         if not embedding:
             continue
 
-        score = cosine_similarity(
-            query_embedding,
-            embedding
-        )
+        score = cosine_similarity(query_embedding, embedding)
+        anchor = (window["start"] + window["end"]) / 2
 
-        if score > best_score:
-            best_score = score
-            best_window = window
+        target_start = max(chunk["start"], anchor - context_before)
+        target_end = min(chunk["end"], anchor + context_after)
 
-    if best_window is None:
-        return None
-
-    anchor = (
-        best_window["start"]
-        + best_window["end"]
-    ) / 2
-
-    target_start = max(
-        chunk["start"],
-        anchor - context_before
-    )
-
-    target_end = min(
-        chunk["end"],
-        anchor + context_after
-    )
-
-    return {
-        "start": target_start,
-        "end": target_end,
-        "text": best_window["text"],
-        "score": best_score
-    }
+        scored.append({
+            "start": target_start,
+            "end": target_end,
+            "text": window["text"],
+            "score": score
+        })
+    return scored
 
 
 def semantic_search(
     query: str,
     limit: int = 5
 ):
-    # Единственный embedding API-вызов
-    # во время поиска.
     query_embedding = create_embedding(query)
 
     pipeline = [
@@ -122,61 +96,40 @@ def semantic_search(
         }
     ]
 
-    results = list(
-        videos_collection.aggregate(pipeline)
-    )
-
+    results = list(videos_collection.aggregate(pipeline))
     formatted_results = []
 
     for result in results:
         chunks = result.get("chunks", [])
-
         if not chunks:
             continue
 
-        best_chunk = None
-        best_chunk_score = -1.0
-
+        all_windows = []
         for chunk in chunks:
-            embedding = chunk.get("embedding", [])
-
-            if not embedding:
-                continue
-
-            score = cosine_similarity(
-                query_embedding,
-                embedding
-            )
-
-            if score > best_chunk_score:
-                best_chunk_score = score
-                best_chunk = chunk
-
-        if best_chunk is None:
+            all_windows.extend(get_scored_windows(query_embedding, chunk))
+            
+        if not all_windows:
             continue
+            
+        all_windows.sort(key=lambda w: w["score"], reverse=True)
+        top_windows = all_windows[:3]
+        
+        video_score = top_windows[0]["score"]
 
-        best_window = find_best_window(
-            query_embedding,
-            best_chunk
-        )
-
-        if best_window is None:
-            continue
-
-        formatted_results.append({
-            "video_id": result["video_id"],
-            "title": result["title"],
-            "score": best_chunk_score,
-            "timestamp_score": best_window["score"],
-            "start": best_window["start"],
-            "end": best_window["end"],
-            "text": best_window["text"]
-        })
+        for w in top_windows:
+            formatted_results.append({
+                "video_id": result["video_id"],
+                "title": result["title"],
+                "score": video_score,
+                "timestamp_score": w["score"],
+                "start": w["start"],
+                "end": w["end"],
+                "text": w["text"]
+            })
 
     formatted_results.sort(
-        key=lambda result:
-        result["timestamp_score"],
+        key=lambda result: result["timestamp_score"],
         reverse=True
     )
 
-    return formatted_results[:limit]
+    return formatted_results[:limit * 3]

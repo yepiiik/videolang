@@ -123,6 +123,103 @@ def add_window_embeddings(
     return embedded_windows
 
 
+def index_single_video(video_id: str, title: str):
+    if video_already_indexed(video_id):
+        print(f"Skipping {video_id}: already indexed")
+        existing_video = get_video(video_id)
+        if existing_video:
+            frontend_chunks = []
+            for ec in existing_video.get("chunks", []):
+                windows = ec.get("windows", [])
+                if not windows:
+                    windows = [{
+                        "start": ec.get("start"),
+                        "end": ec.get("end"),
+                        "text": ec.get("text")
+                    }]
+                frontend_chunks.append({
+                    "start": ec.get("start"),
+                    "end": ec.get("end"),
+                    "text": ec.get("text"),
+                    "windows": [
+                        {
+                            "start": w.get("start"),
+                            "end": w.get("end"),
+                            "text": w.get("text")
+                        } for w in windows
+                    ]
+                })
+
+            return {
+                "status": "skipped",
+                "video": {
+                    "video_id": existing_video["video_id"],
+                    "title": existing_video["title"],
+                    "chunks_count": len(frontend_chunks),
+                    "chunks": frontend_chunks
+                }
+            }
+        else:
+            return {"status": "failed", "reason": "Already indexed but not found in DB"}
+
+    transcript = get_video_transcript(video_id)
+
+    if "error" in transcript:
+        print(f"Skipping {video_id}: {transcript['error']}")
+        return {"status": "failed", "reason": transcript["error"]}
+
+    chunks = chunk_transcript(transcript["transcript"])
+    embedded_chunks = []
+
+    for chunk in chunks:
+        # Основной embedding chunk.
+        chunk_embedding = create_embeddings([chunk["text"]])[0]
+
+        # Более мелкие окна внутри chunk.
+        embedded_windows = add_window_embeddings(
+            transcript["transcript"],
+            chunk
+        )
+
+        embedded_chunks.append({
+            "start": chunk["start"],
+            "end": chunk["end"],
+            "text": chunk["text"],
+            "embedding": chunk_embedding,
+            "windows": embedded_windows
+        })
+
+    video_data = {
+        "video_id": video_id,
+        "title": title
+    }
+    
+    save_video(video_data, transcript, embedded_chunks)
+    
+    frontend_chunks = []
+    for ec in embedded_chunks:
+        frontend_chunks.append({
+            "start": ec["start"],
+            "end": ec["end"],
+            "text": ec["text"],
+            "windows": [
+                {
+                    "start": w["start"],
+                    "end": w["end"],
+                    "text": w["text"]
+                } for w in ec.get("windows", [])
+            ]
+        })
+    
+    frontend_video = {
+        "video_id": video_id,
+        "title": title,
+        "chunks_count": len(embedded_chunks),
+        "chunks": frontend_chunks
+    }
+
+    return {"status": "indexed", "video": frontend_video}
+
 def index_channel(url_info: dict):
     videos = get_channel_videos(url_info)
 
@@ -140,122 +237,17 @@ def index_channel(url_info: dict):
     frontend_videos = []
 
     for video in videos:
-        video_id = video["video_id"]
-
-        if video_already_indexed(video_id):
-            print(
-                f"Skipping {video_id}: already indexed"
-            )
-
-            skipped.append({
-                "video_id": video_id,
-                "title": video["title"]
-            })
-            
-            existing_video = get_video(video_id)
-            if existing_video:
-                frontend_chunks = []
-                for ec in existing_video.get("chunks", []):
-                    windows = ec.get("windows", [])
-                    if not windows:
-                        windows = [{
-                            "start": ec.get("start"),
-                            "end": ec.get("end"),
-                            "text": ec.get("text")
-                        }]
-                    frontend_chunks.append({
-                        "start": ec.get("start"),
-                        "end": ec.get("end"),
-                        "text": ec.get("text"),
-                        "windows": [
-                            {
-                                "start": w.get("start"),
-                                "end": w.get("end"),
-                                "text": w.get("text")
-                            } for w in windows
-                        ]
-                    })
-
-                frontend_videos.append({
-                    "video_id": existing_video["video_id"],
-                    "title": existing_video["title"],
-                    "chunks_count": len(frontend_chunks),
-                    "chunks": frontend_chunks
-                })
-
-            continue
-
-        transcript = get_video_transcript(video_id)
-
-        if "error" in transcript:
-            print(
-                f"Skipping {video_id}: "
-                f"{transcript['error']}"
-            )
-
-            failed.append({
-                "video_id": video_id,
-                "reason": transcript["error"]
-            })
-
-            continue
-
-        chunks = chunk_transcript(
-            transcript["transcript"]
-        )
-
-        embedded_chunks = []
-
-        for chunk in chunks:
-            # Основной embedding chunk.
-            chunk_embedding = create_embeddings(
-                [chunk["text"]]
-            )[0]
-
-            # Более мелкие окна внутри chunk.
-            embedded_windows = add_window_embeddings(
-                transcript["transcript"],
-                chunk
-            )
-
-            embedded_chunks.append({
-                "start": chunk["start"],
-                "end": chunk["end"],
-                "text": chunk["text"],
-                "embedding": chunk_embedding,
-                "windows": embedded_windows
-            })
-
-        save_video(
-            video,
-            transcript,
-            embedded_chunks
-        )
+        result = index_single_video(video["video_id"], video["title"])
         
-        frontend_chunks = []
-        for ec in embedded_chunks:
-            frontend_chunks.append({
-                "start": ec["start"],
-                "end": ec["end"],
-                "text": ec["text"],
-                "windows": [
-                    {
-                        "start": w["start"],
-                        "end": w["end"],
-                        "text": w["text"]
-                    } for w in ec.get("windows", [])
-                ]
-            })
-        
-        frontend_video = {
-            "video_id": video["video_id"],
-            "title": video["title"],
-            "chunks_count": len(embedded_chunks),
-            "chunks": frontend_chunks
-        }
-
-        indexed.append(frontend_video)
-        frontend_videos.append(frontend_video)
+        if result["status"] == "skipped":
+            skipped.append({"video_id": video["video_id"], "title": video["title"]})
+            if "video" in result:
+                frontend_videos.append(result["video"])
+        elif result["status"] == "failed":
+            failed.append({"video_id": video["video_id"], "reason": result.get("reason")})
+        elif result["status"] == "indexed":
+            indexed.append(result["video"])
+            frontend_videos.append(result["video"])
 
     return {
         "indexed_videos": len(indexed),
