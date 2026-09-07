@@ -1,21 +1,30 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
+import { Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+
 import { Search, Link as LinkIcon, CheckSquare, Square, Download, ChevronDown, Sparkles, Code2, ArrowRight, X, LayoutGrid, List as ListIcon } from "lucide-react";
 import { Video, SearchResult } from "@/types";
 import Link from "next/link";
 
 type SearchType = "intelligent" | "regex";
 
-export default function UnifiedPipelinePage() {
-  const [sourceType, setSourceType] = useState("channel");
-  const [sourceUrl, setSourceUrl] = useState("");
+function SearchPageContent() {
+const router = useRouter();
+  const searchParams = useSearchParams();
 
+  const initialSourceUrl = searchParams.get('source') || "";
+  const initialSearchQuery = searchParams.get('q') || "";
+  const initialSearchType = (searchParams.get('type') as SearchType) || "intelligent";
+
+  const [sourceType, setSourceType] = useState("channel");
+  const [sourceUrl, setSourceUrl] = useState(initialSourceUrl);
   const [hasLoaded, setHasLoaded] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-
-  const [searchQuery, setSearchQuery] = useState("");
-  const [searchType, setSearchType] = useState<SearchType>("intelligent");
+  const [searchQuery, setSearchQuery] = useState(initialSearchQuery);
+  const [searchType, setSearchType] = useState<SearchType>(initialSearchType);
+  const [initialLoadTriggered, setInitialLoadTriggered] = useState(false);
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [expandedVideos, setExpandedVideos] = useState<Record<string, boolean>>({});
@@ -26,18 +35,26 @@ export default function UnifiedPipelinePage() {
   const [loadedVideos, setLoadedVideos] = useState<Video[]>([]);
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
 
-  const handleLoad = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!sourceUrl.trim()) {
-      alert("Please enter a valid YouTube channel, playlist, or video URL.");
-      return;
+  const updateUrl = (source: string, query: string, type: SearchType) => {
+    const params = new URLSearchParams();
+    if (source) params.set('source', source);
+    if (query) params.set('q', query);
+    if (type !== 'intelligent') params.set('type', type);
+    
+    const newUrl = params.toString() ? `/?${params.toString()}` : '/';
+    if (window.location.search !== `?${params.toString()}` && window.location.search !== newUrl) {
+      router.replace(newUrl, { scroll: false });
     }
+  };
 
+  const loadSource = async (url: string) => {
+    if (!url.trim()) return;
     setIsLoading(true);
+    updateUrl(url, searchQuery, searchType);
     setLoadedVideos([]);
     try {
       // 1. Fetch channel videos list
-      const videosRes = await fetch(`/api/youtube/channel/videos?query=${encodeURIComponent(sourceUrl)}`);
+      const videosRes = await fetch(`/api/youtube/channel/videos?query=${encodeURIComponent(url)}`);
       const videosData = await videosRes.json();
 
       if (videosData.error) {
@@ -107,6 +124,35 @@ export default function UnifiedPipelinePage() {
     }
   };
 
+  
+  const handleLoad = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!sourceUrl.trim()) {
+      alert("Please enter a valid YouTube channel, playlist, or video URL.");
+      return;
+    }
+    await loadSource(sourceUrl);
+  };
+
+  useEffect(() => {
+    if (initialSourceUrl && !initialLoadTriggered) {
+      setInitialLoadTriggered(true);
+      loadSource(initialSourceUrl);
+    }
+  }, [initialSourceUrl, initialLoadTriggered]);
+
+  const [initialSearchTriggered, setInitialSearchTriggered] = useState(false);
+  useEffect(() => {
+    if (hasLoaded && initialSearchQuery && !initialSearchTriggered) {
+      setInitialSearchTriggered(true);
+      if (initialSearchType === 'intelligent') {
+        handleIntelligentSearch(initialSearchQuery, initialSearchType);
+      }
+    }
+  }, [hasLoaded, initialSearchQuery, initialSearchType, initialSearchTriggered]);
+
+
+
   const clearSource = () => {
     setHasLoaded(false);
     setSourceUrl("");
@@ -120,21 +166,20 @@ export default function UnifiedPipelinePage() {
   const [isSearching, setIsSearching] = useState(false);
   const [lastIntelligentQuery, setLastIntelligentQuery] = useState("");
 
-  const handleIntelligentSearch = async () => {
-    if (!searchQuery.trim() || searchType !== 'intelligent') {
+  const handleIntelligentSearch = async (query = searchQuery, type = searchType) => {
+    if (!query.trim() || type !== 'intelligent') {
       setSearchResults([]);
       setLastIntelligentQuery("");
       return;
     }
     setIsSearching(true);
-    setLastIntelligentQuery(searchQuery.trim());
+    setLastIntelligentQuery(query.trim());
+    updateUrl(sourceUrl, query, type);
     try {
-      const res = await fetch(`/api/youtube/search?query=${encodeURIComponent(searchQuery)}`);
+      const res = await fetch(`/api/youtube/search?query=${encodeURIComponent(query)}`);
       const data = await res.json();
       if (Array.isArray(data)) {
-        // filter data to only include videos from loadedVideos
-        const loadedIds = new Set(loadedVideos.map(v => v.video_id));
-        setSearchResults(data.filter(r => loadedIds.has(r.video_id)));
+        setSearchResults(data);
       }
     } catch (err) {
       console.error(err);
@@ -442,6 +487,8 @@ export default function UnifiedPipelinePage() {
                   e.preventDefault();
                   if (searchType === 'intelligent') {
                     handleIntelligentSearch();
+                  } else {
+                    updateUrl(sourceUrl, searchQuery, searchType);
                   }
                 }}
                 className="flex flex-1 flex-col sm:flex-row bg-background border-2 border-border focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/10 transition-all overflow-hidden rounded-xl shadow-sm w-full"
@@ -757,5 +804,13 @@ export default function UnifiedPipelinePage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function UnifiedPipelinePage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center">Loading...</div>}>
+      <SearchPageContent />
+    </Suspense>
   );
 }
