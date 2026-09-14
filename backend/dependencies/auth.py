@@ -14,8 +14,14 @@ def verify_api_key_no_increment(api_key: Optional[str] = Security(api_key_header
         )
     return api_key
 
-def verify_api_key(api_key: str = Depends(verify_api_key_no_increment)):
+def verify_api_key(api_key: Optional[str] = Depends(verify_api_key_no_increment)):
+    if not api_key:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing X-API-Key header",
+        )
     # In a real app, you would also validate if the api_key exists in Firestore here.
     # For now, we assume it's valid and increment the usage counter.
     usage_tracker.increment_usage(api_key)
     return api_key
+
