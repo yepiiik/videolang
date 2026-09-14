@@ -35,19 +35,22 @@ class YouTubeApiProvider(YouTubeProvider):
         return None
 
     async def get_channel_info(self, url_info: dict) -> Optional[dict]:
-        channel_id = await self.get_channel_id(url_info)
-
-        if channel_id is None:
+        params = {
+            "part": "snippet,statistics",
+            "key": self.api_key
+        }
+        
+        if url_info["type"] == "channel":
+            params["id"] = url_info["id"]
+        elif url_info["type"] == "channel_handle":
+            params["forHandle"] = url_info["id"]
+        else:
             return None
 
         async with httpx.AsyncClient() as client:
             response = await client.get(
                 f"{self.base_url}/channels",
-                params={
-                    "part": "snippet,statistics",
-                    "id": channel_id,
-                    "key": self.api_key
-                }
+                params=params
             )
             data = response.json()
             items = data.get("items", [])
@@ -56,6 +59,7 @@ class YouTubeApiProvider(YouTubeProvider):
                 return None
 
             channel = items[0]
+            channel_id = channel["id"]
 
             return {
                 "channel_id": channel_id,
@@ -97,7 +101,10 @@ class YouTubeApiProvider(YouTubeProvider):
         if channel_id is None:
             return None
 
-        playlist_id = await self._get_uploads_playlist_id(channel_id)
+        if channel_id.startswith("UC"):
+            playlist_id = "UU" + channel_id[2:]
+        else:
+            playlist_id = await self._get_uploads_playlist_id(channel_id)
 
         if playlist_id is None:
             return None

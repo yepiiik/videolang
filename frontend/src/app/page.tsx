@@ -4,7 +4,7 @@ import { useState, useMemo, useEffect } from "react";
 import { Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
-import { Search, Link as LinkIcon, CheckSquare, Square, Download, ChevronDown, Sparkles, Code2, ArrowRight, X, LayoutGrid, List as ListIcon } from "lucide-react";
+import { Search, Link as LinkIcon, CheckSquare, Square, Download, ChevronDown, Sparkles, Code2, ArrowRight, X, LayoutGrid, List as ListIcon, AlertCircle } from "lucide-react";
 import { Video, SearchResult } from "@/types";
 import Link from "next/link";
 
@@ -22,6 +22,7 @@ const router = useRouter();
   const [sourceUrl, setSourceUrl] = useState(initialSourceUrl);
   const [hasLoaded, setHasLoaded] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState(initialSearchQuery);
   const [searchType, setSearchType] = useState<SearchType>(initialSearchType);
   const [initialLoadTriggered, setInitialLoadTriggered] = useState(false);
@@ -49,6 +50,7 @@ const router = useRouter();
 
   const loadSource = async (url: string) => {
     if (!url.trim()) return;
+    setError(null);
     setIsLoading(true);
     updateUrl(url, searchQuery, searchType);
     setLoadedVideos([]);
@@ -58,14 +60,14 @@ const router = useRouter();
       const videosData = await videosRes.json();
 
       if (videosData.error) {
-        alert("Failed to load videos: " + videosData.error);
+        setError("Failed to load videos: " + videosData.error);
         setIsLoading(false);
         return;
       }
 
       const allVideos = Array.isArray(videosData) ? videosData : (videosData.videos || []);
       if (allVideos.length === 0) {
-        alert("No videos found in channel.");
+        setError("No videos found in channel.");
         setIsLoading(false);
         return;
       }
@@ -128,7 +130,7 @@ const router = useRouter();
   const handleLoad = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!sourceUrl.trim()) {
-      alert("Please enter a valid YouTube channel, playlist, or video URL.");
+      setError("Please enter a valid YouTube channel, playlist, or video URL.");
       return;
     }
     await loadSource(sourceUrl);
@@ -426,6 +428,12 @@ const router = useRouter();
                 <p className="text-lg text-muted-foreground">Load any YouTube channel or playlist and export captions in bulk.</p>
               </div>
 
+              {error && (
+                <div className="w-full flex items-center p-4 mb-4 text-red-600 border border-red-200 rounded-2xl bg-red-50/50 dark:bg-red-950/20 dark:border-red-900/50 dark:text-red-400 animate-in fade-in zoom-in-95 duration-300">
+                  <AlertCircle className="w-5 h-5 mr-3 shrink-0" />
+                  <p className="text-sm font-medium">{error}</p>
+                </div>
+              )}
               <div className="flex bg-background border-2 border-border focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/10 transition-all overflow-hidden rounded-2xl shadow-sm">
                 <div className="relative border-r-2 border-border bg-muted/30 shrink-0">
                   <select

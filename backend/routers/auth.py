@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends
-from dependencies.auth import verify_api_key
+from dependencies.auth import verify_api_key_no_increment
 from services.usage_tracker import usage_tracker
 from models.authentication import Authentication
 
@@ -9,7 +9,7 @@ router = APIRouter(
 )
 
 @router.get("/usage")
-def get_usage(api_key: str = Depends(verify_api_key)):
+def get_usage(api_key: str = Depends(verify_api_key_no_increment)):
     """
     Returns the total usage for the provided API key.
     Reads directly from MongoDB.

@@ -1,3 +1,4 @@
+import asyncio
 from services.youtube_service import get_channel_videos
 from services.transcript_service import get_video_transcript
 from services.chunking_service import chunk_transcript
@@ -88,41 +89,6 @@ def build_time_windows(
     return windows
 
 
-def add_window_embeddings(
-    transcript: list,
-    chunk: dict
-):
-    windows = build_time_windows(
-        transcript,
-        chunk["start"],
-        chunk["end"],
-        window_duration=12.0,
-        overlap_duration=4.0
-    )
-
-    if not windows:
-        return []
-
-    texts = [
-        window["text"]
-        for window in windows
-    ]
-
-    embeddings = create_embeddings(texts)
-
-    embedded_windows = []
-
-    for window, embedding in zip(windows, embeddings):
-        embedded_windows.append({
-            "start": window["start"],
-            "end": window["end"],
-            "text": window["text"],
-            "embedding": embedding
-        })
-
-    return embedded_windows
-
-
 async def index_single_video(video_data: dict):
     video_id = video_data.get("video_id")
     title = video_data.get("title", "")
@@ -171,17 +137,53 @@ async def index_single_video(video_data: dict):
         return {"status": "failed", "reason": transcript["error"]}
 
     chunks = chunk_transcript(transcript["transcript"])
-    embedded_chunks = []
+    
+    all_texts = []
+    chunk_meta = []
 
     for chunk in chunks:
-        # Основной embedding chunk.
-        chunk_embedding = create_embeddings([chunk["text"]])[0]
-
-        # Более мелкие окна внутри chunk.
-        embedded_windows = add_window_embeddings(
+        all_texts.append(chunk["text"])
+        
+        windows = build_time_windows(
             transcript["transcript"],
-            chunk
+            chunk["start"],
+            chunk["end"],
+            window_duration=12.0,
+            overlap_duration=4.0
         )
+        
+        for w in windows:
+            all_texts.append(w["text"])
+            
+        chunk_meta.append({
+            "chunk": chunk,
+            "windows": windows
+        })
+
+    if all_texts:
+        embeddings = await asyncio.to_thread(create_embeddings, all_texts)
+    else:
+        embeddings = []
+
+    embedded_chunks = []
+    emb_idx = 0
+
+    for meta in chunk_meta:
+        chunk = meta["chunk"]
+        windows = meta["windows"]
+        
+        chunk_embedding = embeddings[emb_idx]
+        emb_idx += 1
+        
+        embedded_windows = []
+        for w in windows:
+            embedded_windows.append({
+                "start": w["start"],
+                "end": w["end"],
+                "text": w["text"],
+                "embedding": embeddings[emb_idx]
+            })
+            emb_idx += 1
 
         embedded_chunks.append({
             "start": chunk["start"],
