@@ -1,5 +1,8 @@
+from typing import Optional
+
+
 def chunk_transcript(
-    transcript: list,
+    transcript: Optional[list],
     chunk_duration: float = 60.0,
     overlap_duration: float = 10.0
 ):

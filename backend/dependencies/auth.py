@@ -1,3 +1,4 @@
+from typing import Optional
 from fastapi import Security, HTTPException, status
 from fastapi.security import APIKeyHeader
 from services.usage_tracker import usage_tracker
@@ -5,7 +6,7 @@ from services.usage_tracker import usage_tracker
 # The client sends the API key in the X-API-Key header
 api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 
-def verify_api_key(api_key: str = Security(api_key_header)):
+def verify_api_key(api_key: Optional[str] = Security(api_key_header)):
     if not api_key:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
